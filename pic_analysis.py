@@ -1,21 +1,32 @@
 #! ./env/bin/python3
-from xml.dom import HierarchyRequestErr
+
 import cv2
+from cv2 import CHAIN_APPROX_NONE
 
 blue = (0, 0, 255)
 
-img = cv2.imread('./test_images/wordle.jpg')
+img_white = cv2.imread('./test_images/wordle.jpg')
 
-imgcpy = img.copy()
+img_black = cv2.imread('./test_images/wordle.png')
 
-grey_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-retval, thresh = cv2.threshold(grey_img, 50, 255, cv2.THRESH_BINARY)
 
-cv2.imwrite('./thresh1.png', thresh)
+t_lower = 255
+t_upper = 255
 
-img_contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+canny_img = cv2.Canny(img_white, t_lower, t_upper, 7)
 
-cv2.drawContours(imgcpy, img_contours, -1, blue, 5)
+contours, _ = cv2.findContours(canny_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
-cv2.imwrite('./final1.png', imgcpy)
+drawn_contours = img_white.copy()
+cv2.drawContours(drawn_contours, contours, -1, blue, 2)
+
+
+cv2.imshow('canny', canny_img)
+cv2.waitKey(0)
+
+cv2.imshow('drawn_contours', drawn_contours)
+cv2.waitKey(0)
+
+
+cv2.destroyAllWindows()
