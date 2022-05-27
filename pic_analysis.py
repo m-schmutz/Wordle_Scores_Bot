@@ -5,9 +5,12 @@ import pytesseract
 import numpy as np
 from PIL import Image
 import re
-
+####################################################################
+# number of characters in a row
 ROW_LENGTH = 5
-
+####################################################################
+# These are ranges for the different colored squares.
+# Ranges need to be expanded to allow for different shades
 YELLOW_RANGE = (np.array([58, 158, 180]), np.array([60, 160, 182]))
 
 GREY_RANGE = (np.array([59, 57, 57]), np.array([61, 59, 59]))
@@ -15,13 +18,21 @@ GREY_RANGE = (np.array([59, 57, 57]), np.array([61, 59, 59]))
 GREEN_RANGE = (np.array([77, 140, 82]), np.array([79, 142, 84]))
 
 WHITE_RANGE = (np.array([200, 200, 200]), np.array([256, 256, 256]))
-
-
-subs = {'l': 'I', '0': 'O'}
-
-
+####################################################################
+# characters that need to be substituted
+# oh boy this image to text api is incredible
+subs = {'l': 'I', '0': 'O', '|': 'I'}
+####################################################################
+# regular expression for detecting when two characters are the same
+# and in the alphabet
 TWINS = r'^([A-Z])\1$'
 res = re.search
+####################################################################
+####################################################################
+# functions are still old ones
+# new ones are in branch ryans-edits
+
+
 #checks output of pytesseract
 def check_ltr(ltr):
     l_ltr = list(ltr)
