@@ -8,9 +8,11 @@ import re
 
 ROW_LENGTH = 5
 
-YELLOW_RANGE = ()
+YELLOW_RANGE = (np.array([58, 158, 180]), np.array([60, 160, 182]))
 
-GREY_RANGE = ()
+GREY_RANGE = (np.array([59, 57, 57]), np.array([61, 59, 59]))
+
+GREEN_RANGE = (np.array([77, 140, 82]), np.array([79, 142, 84]))
 
 WHITE_RANGE = (np.array([200, 200, 200]), np.array([256, 256, 256]))
 
@@ -18,16 +20,17 @@ WHITE_RANGE = (np.array([200, 200, 200]), np.array([256, 256, 256]))
 subs = {'l': 'I', '0': 'O'}
 
 
-TWINS = r'^(A-Z)\1$'
+TWINS = r'^([A-Z])\1$'
 res = re.search
 #checks output of pytesseract
 def check_ltr(ltr):
     l_ltr = list(ltr)
-    print(f'ltr: {ltr}')
     try:
         ltr = subs[ltr]
     except:
         pass
+
+    print(f'ltr.upper(): {ltr.upper()}')
     
     if res(TWINS, ltr.upper()):
         ltr = ltr[0]
@@ -37,7 +40,12 @@ def check_ltr(ltr):
 
 #takes in subimage and returns ltr contained in subimage
 def get_ltr(si):
-    #create upper and lower bound arrays
+    #create upper and lower bound ar##########
+# GREEN  #  
+# R: 83  #
+# G: 141 #
+# B: 78  #
+##########rays
     #that represent range of white-ish pixels
     lower_bound, upper_bound = WHITE_RANGE
     #mask is the image that grabs only pixels that are white
@@ -66,7 +74,11 @@ def get_subimages(img):
 
     masked = cv2.bitwise_or(mask, img_grey)
     # cv2.imshow('masked', masked)
+    # cv2.waitKey(0)
+    # cv2.imshow('masked', masked)
     retval, thresh = cv2.threshold(masked, 200, 255, cv2.THRESH_BINARY_INV)
+    # cv2.imshow('thresh', thresh)
+    # cv2.waitKey(0)
     contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     # cv2.imshow('thresh', thresh)
     subimages = []
@@ -89,6 +101,24 @@ def get_guesses(subimages):
             guesses.append(guess)
     return guesses
 
+def get_color(si):
+    p = np.array([[si[0][0]]])
+    lower_bound, upper_bound = GREEN_RANGE
+    grnp = cv2.inRange(p, lower_bound, upper_bound)[0][0]
+    if grnp:
+        return 'green'
+    lower_bound, upper_bound = YELLOW_RANGE
+    yp = cv2.inRange(p, lower_bound, upper_bound)[0][0]
+    if yp:
+        return 'yellow'
+    lower_bound, upper_bound = GREY_RANGE
+    gryp = cv2.inRange(p, lower_bound, upper_bound)
+    if gryp:
+        return 'grey'
+
+    
+    
+
 
 img_white = cv2.imread('./test_images/wordle5.png')
 
@@ -97,24 +127,10 @@ subimages = get_subimages(img_white)
 
 si = subimages[0]
 
-# cv2.imshow('subimage', si)
-# cv2.waitKey(0)
-##########
-# GREEN  #  
-# R: 83  #
-# G: 141 #
-# B: 78  #
-##########
-print(str(ascii_uppercase))
+print(get_color(si))
 
-# GREEN_RANGE = (np.array([200, 200, 200]), np.array([256, 256, 256]))
-
-# lower_bound, upper_bound = GREEN_RANGE
-
-# mask = cv2.inRange(si, )
-
-guesses = get_guesses(subimages)
-print(guesses)
+# guesses = get_guesses(subimages)
+# print(guesses)
 
 cv2.waitKey(0)
 cv2.destroyAllWindows()
