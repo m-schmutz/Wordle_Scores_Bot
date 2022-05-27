@@ -21,7 +21,9 @@ WHITE_RANGE = (np.array([200, 200, 200]), np.array([256, 256, 256]))
 ####################################################################
 # characters that need to be substituted
 # oh boy this image to text api is incredible
-subs = {'l': 'I', '0': 'O', '|': 'I'}
+subs = {'l': 'I', 
+        '0': 'O', 
+        '|': 'I'}
 ####################################################################
 # regular expression for detecting when two characters are the same
 # and in the alphabet
@@ -35,17 +37,19 @@ res = re.search
 
 #checks output of pytesseract
 def check_ltr(ltr):
-    l_ltr = list(ltr)
+    #try to substitute letter with known substitutions in the dict()
     try:
+        #if letter is a key in dictionary, replace ltr with its mapping
         ltr = subs[ltr]
+    #otherwise ignore step
     except:
         pass
-
-    print(f'ltr.upper(): {ltr.upper()}')
-    
+    #prints ltr if needed
+    #print(f'ltr.upper(): {ltr.upper()}')
+    #check if ltr is two of the same letter
     if res(TWINS, ltr.upper()):
+        #if it is two of the same letter, keep only one
         ltr = ltr[0]
-
     #return uppercase letter
     return ltr.upper()
 
@@ -128,20 +132,20 @@ def get_color(si):
         return 'grey'
 
     
-    
+check_ltr('u')
 
 
-img_white = cv2.imread('./test_images/wordle5.png')
+# img_white = cv2.imread('./test_images/wordle5.png')
 
 
-subimages = get_subimages(img_white)
+# subimages = get_subimages(img_white)
 
-si = subimages[0]
+# si = subimages[0]
 
-print(get_color(si))
+# print(get_color(si))
 
-# guesses = get_guesses(subimages)
-# print(guesses)
+# # guesses = get_guesses(subimages)
+# # print(guesses)
 
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+# cv2.waitKey(0)
+# cv2.destroyAllWindows()
