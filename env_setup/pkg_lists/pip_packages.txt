@@ -1,0 +1,10 @@
+# This is a comment
+
+# Add required pip3 packages below one per line
+
+opencv-python
+pytesseract
+numpy
+requests
+
+# Keep this line at the bottom
