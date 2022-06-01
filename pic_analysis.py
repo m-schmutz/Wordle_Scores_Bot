@@ -1,77 +1,132 @@
 #!./env/bin/python3
 import cv2
 import pytesseract
+from constants import *
 
-_PSM_SINGLE_LINE    = 7
-_PSM_SINGLE_WORD    = 8
-_PSM_SING_CHAR      = 10
-_PSM_RAW_LINE       = 13
-### Tesseract Manual [https://github.com/tesseract-ocr/tesseract/blob/main/doc/tesseract.1.asc] ###
+_DEBUG_GEN_IMGS = False
 
-TESS_CONFIG         = f"--psm {_PSM_SINGLE_LINE} --oem 3 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-CELL_CHECK_FACTOR   = 0.2
+### get_cell_offset:
+# Returns the relative x/y-coordinate cell offset. This is used to for two reason:
+#   1. Checking the cells_mask to validate a given cell
+#   2. Slicing the image, removing whitespace around the given character
+def get_cell_offset(width):
+    return int(width * CELL_CHECK_FACTOR)
 
+### process_words:
+# Generates a list of words using positional image data and an image containing
+# each word/guess, img_chars.
+def process_words(img_chars, cells_mask, cells, cell_width):
 
-def get_image_slice_data(cells_mask):
+    # Local variable init
+    words   = []                            # The list of words we are generating
+    offset  = get_cell_offset(cell_width)   # The x/y-offset, in pixels
 
-    # Get the contours of each cell
-    cell_contours, _ = cv2.findContours(cells_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+#region Sort, Read, & Parse
+    # We cannot gurantee that each character cell was produced in order from
+    # left-to-right, so we will sort the cells by x/y-coordinates from top-to-bottom
+    # and left-to-right, with priority to the former. This way we can ensure every
+    # sequential subset of length WORD_LEN, starting at 0, contains the correct
+    # characters. We then sort each subset from left-right, to produce the correct
+    # word/guess made by the player.
+    cells.sort( key=lambda c: (c[1], c[0]) )
+    for i in range(NUM_MAX_WORDS):
 
-    # Get the cell height
-    height = cv2.boundingRect(cell_contours[0])[3]
+        # Local variable init
+        word        = ""                                    # The word of the current "row"
+        cur_cells   = cells[ WORD_LEN*i : WORD_LEN*(i+1) ]  # The subset, or "row", of cells to look at
 
-    # Get y-coordinate of each contour
-    y_coords = []
-    cellCheckOffset = int(height * CELL_CHECK_FACTOR)
-    for c in cell_contours:
-        x,y,_,_ = cv2.boundingRect(c)
-        if (cells_mask[y + cellCheckOffset, x + cellCheckOffset]):
-            y_coords.append(y)
+#region Empty Row Check
+        # Check the cells_mask at this row. We can stop generating words
+        # if we know this row has blank cells. If any cells within a row
+        # are blank, we know the entire row is also blank.
+        mask_check_cell = cur_cells[0]
+        x_check         = mask_check_cell[0] + offset
+        y_check         = mask_check_cell[1] + offset
 
-    # Get every 5th coordinate (sorted, because then we know the indecies of each word and WORD_LENGTH)
-    # The value grabbed may be a few pixels off, but this is negligible
-    y_coords.sort()
-    return y_coords[::5], height
+        if (not cells_mask[y_check, x_check]):
+            return words
+#endregion
 
+#region Sort Subset & Read Characters
+        # Sort by x/y-coordinates, left-to-right
+        cur_cells.sort( key=lambda c: c[0] )
+        for cell in cur_cells:
 
+            # Local variable init
+            x = cell[0]                     # The x-coord of the cell's top-left point
+            y = cell[1]                     # The y-coord of the cell's top-left point
+            x_beg = x + offset              # The image's top slice bound
+            y_beg = y + offset              # The image's left slice bound
+            x_end = x + cell_width - offset # The image's lower slice bound
+            y_end = y + cell_width - offset # The image's right slice bound
+
+            # Slice the image and hand it off to Tesseract
+            img_slice = img_chars[y_beg:y_end, x_beg:x_end]
+            text = pytesseract.image_to_string(img_slice, lang="eng", config=TESS_CONFIG)
+
+            # Clean up the result and append it to the current word
+            word += text.strip()
+#endregion
+
+        # Add the word to our list
+        words.append(word)
+#endregion
+
+    return words
+
+### words_from_image:
+# Given a cropped screenshot of a Worlde game, produces a list of the player's guesses.
 def words_from_image(img):
 
-    words = []
+#region Setup & Mask Generation
+##### First, we will generate a mask for both the characters and the cells.
 
     # Convert image to grayscale so we can use cv2.threshold() & cv2.findContours()
     img_grayscale = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    if _DEBUG_GEN_IMGS: cv2.imwrite("debug_images_dump/img_grayscale.png", img_grayscale)
 
     # Get inverted binary mask of the characters
     # Pixels in range [200, 255] set to 0 (black), otherwise 1 (white)
-    _, letters_mask = cv2.threshold(img_grayscale, 200, 255, cv2.THRESH_BINARY_INV)
-    # cv2.imwrite('letters_mask.png', letters_mask)
+    _, img_chars = cv2.threshold(img_grayscale, 200, 255, cv2.THRESH_BINARY_INV)
+    if _DEBUG_GEN_IMGS: cv2.imwrite("debug_images_dump/img_chars.png", img_chars)
 
     # Get binary mask of the character cells
     # Pixels in range [50, 255] set to 1 (white), otherwise 0 (black)
     _, cells_mask = cv2.threshold(img_grayscale, 50, 255, cv2.THRESH_BINARY)
-    # cv2.imwrite('cells_mask.png', cells_mask)
+    if _DEBUG_GEN_IMGS: cv2.imwrite("debug_images_dump/cells_mask.png", cells_mask)
+#endregion
 
-    # Get information about how to slice the image (by word)
-    slice_coords, slice_height = get_image_slice_data(cells_mask)
+#region Milking the Contours
+##### mommies milkers am i right
+##### Next, we will extract positional information from the contours produced by OpenCV.
 
-    # Generate a list of the words produced by pytesseract
-    for y in slice_coords:
-        slice = letters_mask[ y:y+slice_height, : ]
-        word = pytesseract.image_to_string(slice, lang="eng", config=TESS_CONFIG).split()
-        words.append(word)
+    # Get the x/y-coordinate of each cell and their shared width
+    cells = []
+    cell_contours, _ = cv2.findContours(cells_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for contour in cell_contours:
+        x, y, _, _ = cv2.boundingRect(contour)
+        cells.append( (x, y) )
+    
+    if _DEBUG_GEN_IMGS:
+        img_crosshairs = img.copy()
+        leng = 10           # Crosshair radius
+        color = (0,0,255)   # BGR
+        for cell in cells:
+            x = cell[0]
+            y = cell[1]
+            img_crosshairs[y-leng:y+leng, x] = color
+            img_crosshairs[y, x-leng:x+leng] = color
+        cv2.imwrite("debug_images_dump/img_crosshairs.png", img_crosshairs)
 
-    return words
+    # Get the cells' width from an arbitrary cell contour (0th index, but can be any)
+    _, _, cell_width, _ = cv2.boundingRect(cell_contours[0])
+#endregion
 
+    # Construct a list of the words using Tesseract
+    return process_words(img_chars, cells_mask, cells, cell_width)
 
-# currently, pytesseract.image_to_string yields correct results most of the time.
-# it may be beneficial to read by character rather than by word...
-# NOTE: DOES NOT WORK ON IMAGES WITH WHITE BACKGROUNDS YET
-# current misreads:
-#   psm 7
-#   - reading HONED as HONEOD   (wordle_dark_1.png)
-#   psm 13
-#   - reading BONEY as BOONEY   (wordle_dark_1.png)
-#   - reading GUARD as GUAROD   (wordle_dark_2.png)
+### main:
+# Grab a Wordle game screenshot and print the words/guesses.
 def main():
     image = cv2.imread("./test_images/wordle_dark_1.png")
     words = words_from_image(image)
