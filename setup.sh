@@ -3,7 +3,7 @@ echo -e "==========================================================="
 echo -e "Beginning Virtual Environment Setup"
 echo -e "===========================================================\n"
 
-echo -e "Checking that apt is up to date: \033[s"
+echo -e "Checking that apt is up to date (This can take a while if apt is out of date): \033[s"
 sudo apt -y update -y > /dev/null 2> /dev/null && sudo apt upgrade -y > /dev/null 2> /dev/null
 echo -e "\033[u\033[92mdone\033[0m"
 if [ $(basename $PWD) != "Wordle_Scores_Bot" ]; then
