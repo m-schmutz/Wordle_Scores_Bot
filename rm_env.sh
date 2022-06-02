@@ -1,4 +1,7 @@
 #!/bin/bash
+###############################################################################################################################################################
+###############################################################################################################################################################
+### These are functions for turning the passed string to the color of the function name
 red() {
     echo "\e[31m$1\e[0m"
 }
@@ -19,85 +22,110 @@ magenta() {
     echo "\e[35m$1\e[0m"
 }
 
-echo -e "==========================================================="
-echo -e "Virtual Environment Removal"
-echo -e "===========================================================\n"
+###############################################################################################################################################################
+###############################################################################################################################################################
+### escape sequences to control cursor 
+### for more info on ANSI codes: https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797
 
+# saves cursor position
+sc="\e[s"
+# restores cursor to last save position
+rc="\e[u"
+# erases line from cursor position to the end of line
+el="\e[0K"
+
+###############################################################################################################################################################
+###############################################################################################################################################################
+### Check if the script is being sourced
+
+# this is necessary for some actions to be successfully applied (example of this is when PATH variable is updated later on)
+# for more info on using source: https://superuser.com/questions/46139/what-does-source-do
+# essentially, it runs the script in the current shell rather than launching another process
+
+# if the script is not being sourced, request user to run script again as source, then exit script
+# stackoverflow once again to the rescue to figure out how to determine this: 
+# https://stackoverflow.com/questions/2683279/how-to-detect-if-a-script-is-being-sourced
+if [[ $0 == "$BASH_SOURCE" ]]; then
+    echo -e "Please run script as source. This is required so that PATH is updated"
+    echo -e "run as: source ./rm_env.sh"
+    exit 1
+fi
+
+###############################################################################################################################################################
+###############################################################################################################################################################
+### Print out starting banner
+echo -e "=================================================================================="
+echo -e "\t\tVirtual Environment Removal"
+echo -e "=================================================================================="
+
+###############################################################################################################################################################
+###############################################################################################################################################################
+### Check that an environment exists
+# check if 'env' directory exists
 if [ -d "env" ]; then
     env_path=$(cd ./env && pwd)
     echo -e "Virtual Environment found: ($env_path)"
 
+# else print error and exit script 
 else
-    echo -e "Environment $(red "Environment not found")"
-    exit 1
+    echo -e "$(red "ERROR"): No environment found"
+    return 1
 fi
-
+###############################################################################################################################################################
+###############################################################################################################################################################
+### Ensure that user wants to delete environment
 read -p "Type 'yes' to confirm virtual environment removal: " remove
 
+### if they do, delete env and remove environment path from PATH
 if [ "$remove" == "yes" ]; then   
+    echo -e "\n**********************************************************************************"
     echo -e "$(yellow "Beginning virtual environment removal")"
 
-    # rm -r ./env
-    # equivalent to grep -v -e ‘^1’ -
+    echo -e "----------------------------------------------------------------------------------"
+    echo -e "Removing virtual environment --> $sc$(yellow "working...")"
+    # get the environment path before it is deleted
+    env_path=$(cd ./env/usr/bin && pwd)
+    # delete the virtual environment
+    rm -r ./env
+    echo -e "$rc$el$(green "done")"
+    
+    echo -e "----------------------------------------------------------------------------------"
+    echo -e "Removing exported path in ~/.profile --> $sc$(yellow "working...")"
 
-    added_path=$(cd ./env/usr/bin && pwd)
+    fslash=\/
+    bslash=\\\/
 
-    echo $added_path
+    ## https://reactgo.com/bash-replace-characters-string/
+    # placing escape character before each forward slash so that it is read correctly by sed
+    env_path="${env_path//[$fslash]/$bslash}"
 
-    sed '/export PATH="$PATH:/home/msch/Projects/Wordle_Scores_Bot/env/usr/bin"/d' ~/.profile
+    # construct line added to ~/.profile
+    line="export PATH=\"\$PATH:$env_path\""
 
-    echo -e "$(green "Removal Completed")"
+    # remove the line from ~/.profile
+    sed -i "/$line/d" ~/.profile
+    
+    echo -e "$rc$el$(green "done")"
+
+    echo -e "----------------------------------------------------------------------------------"
+
+    echo -e "Removing environment path from PATH --> $sc$(yellow "working...")"
+
+    # remove environment path from PATH
+    PATH=${PATH//:$env_path/}
+
+    echo -e "$rc$el$(green "done")"
+
+    echo -e "----------------------------------------------------------------------------------"
 else 
     echo -e "\t$(red "REMOVAL ABORTED!!?!!!!!?")"
-    sleep 1
-    echo -e "\t\t$(magenta "bitch")"
-    sleep 1
-    echo -e "\t$(green "i bet u want ur console back huh?")"
-    sleep 5
-    echo -e "\t\t\t:-)"
-    sleep 3
-    echo -e "."
-    sleep 1
-    echo -e "."
-    sleep 1
-    echo -e "."
-    sleep 1
-    echo -e "."
-    sleep 4
-    echo -e "."
-    sleep 15
-    echo -e ">:-)"
-    sleep 120
+    return 2
 fi
+echo -e "\n**********************************************************************************\n"
 
-
-
-
-# # ~/.profile: executed by the command interpreter for login shells.
-# # This file is not read by bash(1), if ~/.bash_profile or ~/.bash_login
-# # exists.
-# # see /usr/share/doc/bash/examples/startup-files for examples.
-# # the files are located in the bash-doc package.
-
-# # the default umask is set in /etc/profile; for setting the umask
-# # for ssh logins, install and configure the libpam-umask package.
-# #umask 022
-
-# # if running bash
-# if [ -n "$BASH_VERSION" ]; then
-#     # include .bashrc if it exists
-#     if [ -f "$HOME/.bashrc" ]; then
-# 	. "$HOME/.bashrc"
-#     fi
-# fi
-
-# # set PATH so it includes user's private bin if it exists
-# if [ -d "$HOME/bin" ] ; then
-#     PATH="$HOME/bin:$PATH"
-# fi
-
-# # set PATH so it includes user's private bin if it exists
-# if [ -d "$HOME/.local/bin" ] ; then
-#     PATH="$HOME/.local/bin:$PATH"
-# fi
-# export PATH="$PATH:/home/msch/Projects/Wordle_Scores_Bot/env/usr/bin"
+###############################################################################################################################################################
+###############################################################################################################################################################
+clear -x
+echo -e "=================================================================================="
+echo -e "\t\t$(green "Environment removal complete")"
+echo -e "=================================================================================="

@@ -1,11 +1,9 @@
 # this is a comment
 
 # add required debian packages to the list below
-# put the name of the package to download and then
-# put the name of the binary separated by a comma
+# put the name of the package to download 
 
-tesseract-ocr,tesseract
-shc,shc
+tesseract-ocr
 
 
 # Keep this line at bottom of list

@@ -1,4 +1,4 @@
-#!./env/bin/python3
+#!./../env/bin/python3
 import requests
 from datetime import datetime, timedelta, date
 import re
@@ -132,3 +132,14 @@ def get_todays_word():
     return word
 ########################################################################################
 ########################################################################################
+if __name__ == '__main__':
+    update_data()
+
+    word = get_todays_word()
+
+    print(f'Today\'s word is: {word}')
+
+    while 1:
+        search_date = input('Enter date to search: ')
+        prev = get_word_by_date
+        print(f'word on {search_date} was: {prev}')
