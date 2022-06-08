@@ -41,3 +41,14 @@ def avg_accuracy(word:str, guesses:list):
     # return the average of accuracy
     return avg / len(guesses)
 ########################################################################################
+
+
+word = 'chef'
+
+guess = 'beef'
+
+def better(word:str, guess:str):
+    avg = float()
+
+
+
