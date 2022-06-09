@@ -4,17 +4,30 @@ import pytesseract
 from constants import *
 from ansi import *
 
-_DEBUG_GEN_IMGS = True
-_DEBUG_PRINT    = True
+_DEBUG_GEN_IMGS = False
+_DEBUG_PRINT    = False
 
-WHITE = [255, 255, 255]
+#region INTERNAL FUNCTIONS
+### _try_blurs:
+############################################################################################
+# Attempts to extract a character from an image slice using a variety of different blur
+# factors, BLUR_FACTORS. If it returns None, no character could be read by Tesseract.
+def _try_blurs(img):
 
+    for bf in BLUR_FACTORS:
+        tess_source = cv2.blur( img, bf )
+        tess_output = pytesseract.image_to_string( tess_source, lang="eng", config=TESS_CONFIG )
+        char = tess_output.strip()
+        if char != "":
+            return char
 
-### process_words:
+    return None
+
+### _process_words:
 ############################################################################################
 # Generates a list of words using positional image data and the image img_chars containing
 # each word/guess.
-def process_words(img_chars, cells_mask, cells, cell_width):
+def _process_words(img_chars, cells_mask, cells, cell_width):
     if _DEBUG_PRINT: print("Processing...")
 
     # Local variable init
@@ -29,11 +42,11 @@ def process_words(img_chars, cells_mask, cells, cell_width):
     # characters. We then sort each subset from left-right, to produce the correct
     # word/guess made by the player.
     cells.sort( key=lambda c: (c[1], c[0]) )
-    for i in range(len(cells) // 5):
+    for i in range( len(cells) // 5 ):
 
         # Local variable init
-        word        = ""                                    # The word of the current "row"
-        cur_cells   = cells[ WORD_LEN*i : WORD_LEN*(i+1) ]  # The subset, or "row", of cells to look at
+        word        = ""                                            # The word of the current "row"
+        cur_cells   = cells[ WORD_LEN * i : WORD_LEN * (i + 1) ]    # The subset, or "row", of cells to look at
 
         #region Empty Row Check
         # Check the cells_mask at this row. We can stop generating words
@@ -42,7 +55,6 @@ def process_words(img_chars, cells_mask, cells, cell_width):
         cell        = cur_cells[0]
         x_offset    = cell[0] + offset
         y_offset    = cell[1] + offset
-
         if (not cells_mask[y_offset, x_offset]):
             return words
         #endregion
@@ -60,12 +72,13 @@ def process_words(img_chars, cells_mask, cells, cell_width):
             x_end = x + cell_width - offset # The image's lower slice bound
             y_end = y + cell_width - offset # The image's right slice bound
 
-            # Slice the image and hand it off to Tesseract
-            img_slice = img_chars[y_beg:y_end, x_beg:x_end]
-            tess_output = pytesseract.image_to_string(img_slice, lang="eng", config=TESS_CONFIG)
+            # Slice the image and try a handful of blur parameters on it
+            img_char = img_chars[ y_beg:y_end, x_beg:x_end ]
+            char = _try_blurs(img_char)
+            if char == None:
+                cv2.imwrite("./debug_images_dump/bad_char.png", img_char)
+                quit("Could not resolve a character for image \"/debug_images_dump/bad_char.png\"")
 
-            # Clean up the result and append it to the current word
-            char = tess_output.strip()
             word += char
             if _DEBUG_PRINT: print(char, end='')
         #endregion
@@ -77,95 +90,101 @@ def process_words(img_chars, cells_mask, cells, cell_width):
 
     return words
 
-
-def filter_image(img):
-
-    # Convert image to grayscale so we can use cv2.threshold() & cv2.findContours()
-    img_grayscale = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    if _DEBUG_GEN_IMGS: cv2.imwrite("debug_images_dump/img_grayscale.png", img_grayscale)
-
-    # Generate cells_mask based on Wordle theme
-    if list(img[0, 0]) == WHITE:
-        # Generate a binary mask of the word cells
-        # Pixels in range [200, 255] set to 0 (black), otherwise 1 (white)
-        try: _, cells_mask = cv2.threshold(img_grayscale, 200, 255, cv2.THRESH_BINARY_INV)
-        except Exception as e:  quit("> Error creating the cell mask:", e, "\n> Quitting...")
-        if _DEBUG_GEN_IMGS: cv2.imwrite("debug_images_dump/cells_mask.png", cells_mask)
-
-    else:
-        # Generate a binary mask of the word cells
-        # Pixels in range [50, 255] set to 1 (white), otherwise 0 (black)
-        try: _, cells_mask = cv2.threshold(img_grayscale, 50, 255, cv2.THRESH_BINARY)
-        except Exception as e:  quit("> Error creating the cell mask:", e, "\n> Quitting...")
-        if _DEBUG_GEN_IMGS: cv2.imwrite("debug_images_dump/cells_mask.png", cells_mask)
-
-    # Generate an inverted binary mask of the characters
-    # Pixels in range [200, 255] set to 0 (black), otherwise 1 (white)
-    try: _, img_chars = cv2.threshold(img_grayscale, 200, 255, cv2.THRESH_BINARY_INV)
-    except Exception as e:  quit("> Error creating the character mask:", e, "\n> Quitting...")
-    if _DEBUG_GEN_IMGS: cv2.imwrite("debug_images_dump/img_chars.png", img_chars)
-
-    return img_chars, cells_mask
-
-
-
 ### _is_uniform:
 ############################################################################################
 # Returns True when all items in the array are list-equivalent
 #   - helper for _valid_margin()
 def _is_uniform(array):
     array = array.tolist()
-    val = array[0]
-    for item in array:
-        if item != val:
+    sample = array[0]
+    for element in array:
+        if element != sample:
             return False
     return True
 
-### _valid_margin:
+### _validate_margin:
 ############################################################################################
 # We test the outermost edges of the image to disallow the image submission
 # to be processed. By demanding a more structured input, we alleviate the amount
 # of processing necessary.
-#   - help for words_from_image()
-def _valid_margin(img):
+def _validate_margin(img):
 
     # The dimensions of the image
     height  = img.shape[0]
     width   = img.shape[1]
 
     # Each edge/slice of the image (and no, i don't feel like getting rid of the redundant corner checks)
-    if not _is_uniform( img[0, :]        ): return False    # North edge
-    if not _is_uniform( img[:, width-1]  ): return False    # East edge
+    if not _is_uniform( img[0, :] ): return False           # North edge
+    if _DEBUG_GEN_IMGS: cv2.imwrite("debug_images_dump/top_edge.png", img[0, :])
+    
+    if not _is_uniform( img[:, width-1] ): return False     # East edge
+    if _DEBUG_GEN_IMGS: cv2.imwrite("debug_images_dump/left_edge.png", img[:, width-1])
+    
     if not _is_uniform( img[height-1, :] ): return False    # South edge
-    if not _is_uniform( img[:, 0]        ): return False    # West edge
+    if _DEBUG_GEN_IMGS: cv2.imwrite("debug_images_dump/bottom_edge.png", img[height-1, :])
+    
+    if not _is_uniform( img[:, 0] ): return False           # West edge
+    if _DEBUG_GEN_IMGS: cv2.imwrite("debug_images_dump/right_edge.png", img[:, 0])
 
     return True
-    
+
+### _get_masks:
+############################################################################################
+# Generate a mask for both the character cells and the characters themselves.
+def _get_masks(img):
+
+    # Convert image to grayscale so we can use cv2.threshold() & cv2.findContours()
+    img_grayscale = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    sample_pixel = img[0, 0]
+    light_theme = all( val >= 100 for val in sample_pixel )
+
+    # Generate the cells and characters masks
+    # Light Theme
+    if light_theme:
+        _, cells_mask_inv = cv2.threshold(img_grayscale, 200, 255, cv2.THRESH_BINARY)
+        chars_mask = cells_mask = cv2.bitwise_not(cells_mask_inv)
+    # Dark Theme
+    else:
+        _, cells_mask = cv2.threshold(img_grayscale, 50, 255, cv2.THRESH_BINARY)
+        _, chars_mask = cv2.threshold(img_grayscale, 200, 255, cv2.THRESH_BINARY_INV)
+
+    # Make sure the image was cropped correctly
+    if not _validate_margin(cells_mask):
+        quit("> " + ANSI("Error: Your image needs to have a margin of space around the board!").red() + "\n> Quitting...")
+
+    if _DEBUG_GEN_IMGS:
+        cv2.imwrite("debug_images_dump/cells_mask.png", cells_mask)
+        cv2.imwrite("debug_images_dump/chars_mask.png", chars_mask)
+        cv2.imwrite("debug_images_dump/img_grayscale.png", img_grayscale)
+
+    return chars_mask, cells_mask
+#endregion
+
+# Functions for external use:
 ### words_from_image:
 ############################################################################################
 # Given a cropped screenshot of a Worlde game, produces a list of the player's guesses.
 def words_from_image(img):
 
-    # Required Pre-processing Image Criteria
-    if not _valid_margin(img):
-        quit("> " + ANSI("Error: Your image needs to have a margin of space around the board!").red() + "\n> Quitting...")
+    # Generate a mask of the cells and characters
+    chars_mask, cells_mask = _get_masks(img)
 
-    img_chars, cells_mask = filter_image(img)
+    # Next, we will extract information from the contours produced by OpenCV.
+    cell_contours, _ = cv2.findContours(cells_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    _, _, cell_width, _ = cv2.boundingRect(cell_contours[0])
 
-
-    # Next, we will extract positional information from the contours produced by OpenCV.
     # Get the x/y-coordinate of each cell and their shared width
-    try: cell_contours, _ = cv2.findContours(cells_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    except Exception as e:  quit("> Error generating the cell contours:", e, "\n> Quitting...")
-
     cells = []
     for contour in cell_contours:
         x, y, _, _ = cv2.boundingRect(contour)
         cells.append( (x, y) )
-    
+
     if _DEBUG_GEN_IMGS:
+        img_contours = cv2.drawContours(img.copy(), cell_contours, -1, (0,0,255))
+        cv2.imwrite('debug_images_dump/img_contours.png', img_contours)
+
         img_crosshairs = img.copy()
-        leng = 10   # Crosshair radius
+        leng = cell_width // 20
         for cell in cells:
             x = cell[0]
             y = cell[1]
@@ -173,20 +192,19 @@ def words_from_image(img):
             img_crosshairs[ y, x-leng:x+leng ] = (0,0,255)
         cv2.imwrite("debug_images_dump/img_crosshairs.png", img_crosshairs)
 
-    # Get the cells' width from an arbitrary cell contour (0th index, but can be any)
-    _, _, cell_width, _ = cv2.boundingRect(cell_contours[0])
-
-
     # Finally, we can construct a list of the words using Tesseract
-    return process_words(img_chars, cells_mask, cells, cell_width)
+    return _process_words(chars_mask, cells_mask, cells, cell_width)
 
 
 
+# image_path = "./test_images/light1.png"
+# image = cv2.imread(image_path)
+# if image is None:
+#     quit("> " + ANSI("Error: Could not read image.").red() + "\n> Quitting...")
+# words_from_image(image)
 
-image_path = "./test_images/wordle_light_2.jpg"
-image = cv2.imread(image_path)
-
-if image is None:
-    quit("> " + ANSI("Error: Could not read image.").red() + "\n> Quitting...")
-
-words_from_image(image)
+# for i in range(1, 5):
+#     image = cv2.imread(f"./test_images/dark{i}.png")
+#     words_from_image(image)
+#     image = cv2.imread(f"./test_images/light{i}.png")
+#     words_from_image(image)

@@ -1,6 +1,7 @@
 WORD_LEN            = 5     # Worlde word length
 NUM_MAX_WORDS       = 6     # Worlde maximum number of guesses
 CELL_CHECK_FACTOR   = 0.2   # This helps Tesseract produce more consitent and correct characters
+BLUR_FACTORS        = [ (3,3), (5,5), (3,5), (5,3), (1,5), (5,1) ]  # idk seemed to resolve all misreads i saw
 
 #region Tesseract
 # Manual [https://github.com/tesseract-ocr/tesseract/blob/main/doc/tesseract.1.asc]
