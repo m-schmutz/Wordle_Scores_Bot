@@ -1,4 +1,4 @@
-class ANSI:
+class ansi:
 
     _reset      = "\033[0m"
     _bold       = "\033[1m"
@@ -37,64 +37,64 @@ class ANSI:
         return self._string + other
 
     def bold(self):
-        return ANSI._bold + self._string + ANSI._reset
+        return ansi._bold + self._string + ansi._reset
 
     def italic(self):
-        return ANSI._italic + self._string + ANSI._reset
+        return ansi._italic + self._string + ansi._reset
 
     def underline(self):
-        return ANSI._underline + self._string + ANSI._reset
+        return ansi._underline + self._string + ansi._reset
 
     def rgb(self, r=0, g=0, b=0, bg=False):
         if bg:
-            return ANSI.bg.rgb(r, g, b) + self._string + ANSI._reset
+            return ansi.bg.rgb(r, g, b) + self._string + ansi._reset
 
-        return ANSI.fg.rgb(r, g, b) + self._string + ANSI._reset
+        return ansi.fg.rgb(r, g, b) + self._string + ansi._reset
 
     def black(self, fg=True):
         if fg:
-            return ANSI.fg.black + self._string + ANSI._reset
+            return ansi.fg.black + self._string + ansi._reset
         
-        return ANSI.bg.black + self._string + ANSI._reset
+        return ansi.bg.black + self._string + ansi._reset
 
     def red(self, fg=True):
         if fg:
-            return ANSI.fg.red + self._string + ANSI._reset
+            return ansi.fg.red + self._string + ansi._reset
         
-        return ANSI.bg.red + self._string + ANSI._reset
+        return ansi.bg.red + self._string + ansi._reset
 
     def green(self, fg=True):
         if fg:
-            return ANSI.fg.green + self._string + ANSI._reset
+            return ansi.fg.green + self._string + ansi._reset
         
-        return ANSI.bg.green + self._string + ANSI._reset
+        return ansi.bg.green + self._string + ansi._reset
 
     def yellow(self, fg=True):
         if fg:
-            return ANSI.fg.yellow + self._string + ANSI._reset
+            return ansi.fg.yellow + self._string + ansi._reset
         
-        return ANSI.bg.yellow + self._string + ANSI._reset
+        return ansi.bg.yellow + self._string + ansi._reset
 
     def blue(self, fg=True):
         if fg:
-            return ANSI.fg.blue + self._string + ANSI._reset
+            return ansi.fg.blue + self._string + ansi._reset
         
-        return ANSI.bg.blue + self._string + ANSI._reset
+        return ansi.bg.blue + self._string + ansi._reset
 
     def magenta(self, fg=True):
         if fg:
-            return ANSI.fg.magenta + self._string + ANSI._reset
+            return ansi.fg.magenta + self._string + ansi._reset
         
-        return ANSI.bg.magenta + self._string + ANSI._reset
+        return ansi.bg.magenta + self._string + ansi._reset
 
     def cyan(self, fg=True):
         if fg:
-            return ANSI.fg.cyan + self._string + ANSI._reset
+            return ansi.fg.cyan + self._string + ansi._reset
         
-        return ANSI.bg.cyan + self._string + ANSI._reset
+        return ansi.bg.cyan + self._string + ansi._reset
 
     def white(self, fg=True):
         if fg:
-            return ANSI.fg.white + self._string + ANSI._reset
+            return ansi.fg.white + self._string + ansi._reset
         
-        return ANSI.bg.white + self._string + ANSI._reset
+        return ansi.bg.white + self._string + ansi._reset
