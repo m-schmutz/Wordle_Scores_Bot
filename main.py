@@ -1,32 +1,32 @@
 #!./env/bin/python3
+from tracemalloc import start
 import cv2
-import wordle_image_processing as wip
 import time
+import ansi
+import wordle_image_processing as wip
+import wordle_scoring as ws
 
-# Get the image
-image_path = "./test_images/light1.png"
-image = cv2.imread(image_path)
+def main():
+    # Get the image
+    image_path  = "./test_images/dark4.png"
+    image       = cv2.imread(image_path)
 
-# Make sure it was read properly
-if image is None:
-    quit("Error: Could not read image.")
+    # Make sure it was read properly
+    if image is None:
+        quit("Error: Could not read image.")
 
+    # Get guesses from image
+    print( ansi.ansi("Analyzing...").italic(), end=' ' )
+    start   = time.time()
+    guesses = wip.get_guesses(image)
+    end     = time.time()
+    print( ansi.ansi("Finished in %.2fs"%(end - start)).italic() )
 
-print("Analyzing...", end=' ')
+    # Pretty print scored game
+    scored = ws.pretty_score_game(guesses, "CREAK")
+    for guess in scored:
+        print(guess)
 
-# Get guesses from image
-s = time.time()
-guesses = wip.get_guesses(image)
-e = time.time()
+    return
 
-print("Finished in %.2fs"%(e-s))
-print(guesses)
-
-
-
-# test all test images
-# for i in range(1, 5):
-#     image = cv2.imread(f"./test_images/dark{i}.png")
-#     words_from_image(image)
-#     image = cv2.imread(f"./test_images/light{i}.png")
-#     words_from_image(image)
+main()

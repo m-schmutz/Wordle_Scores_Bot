@@ -98,3 +98,9 @@ class ansi:
             return ansi.fg.white + self._string + ansi._reset
         
         return ansi.bg.white + self._string + ansi._reset
+
+    def gray(self, fg=True):
+        if fg:
+            return self.rgb(150, 150, 150)
+
+        return self.rgb(150, 150, 150, bg=False)
