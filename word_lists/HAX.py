@@ -4,6 +4,8 @@ from datetime import datetime, timedelta, date
 import re
 import pickle
 ########################################################################################
+#region "constants"
+########################################################################################
 # OFFSET is used to remove the first 3 letters of the matching string ('ko=' and 'wo=')
 OFFSET = 3
 
@@ -22,7 +24,11 @@ word_pattern = r'[a-z]{5}'
 # re.search() function 
 res = re.search
 ########################################################################################
-#region get__web_data
+#endregion
+########################################################################################
+
+########################################################################################
+#region get__web_data()
 ########################################################################################
 # requests from www.nytimes.com for the main.js file which contains the two word lists
 # and returns them as comma delimited lists
@@ -56,6 +62,10 @@ def get_web_data():
 ########################################################################################
 #endregion
 ########################################################################################
+
+########################################################################################
+#region map_word_dates()
+########################################################################################
 # map each word in the ko list to its corresponding date
 def map_word_dates(todays_word:str, ko:list):
     # initialize ko_dict, a dictionary mapping each date to a word
@@ -88,7 +98,11 @@ def map_word_dates(todays_word:str, ko:list):
     # return the dictionary
     return ko_dict
 ########################################################################################
-#region store_data
+#endregion
+########################################################################################
+
+########################################################################################
+#region store_data()
 ########################################################################################
 # this will take the data from the two lists and store them in pickle files
 def store_data(ko_dict, wo):
@@ -104,8 +118,10 @@ def store_data(ko_dict, wo):
 #endregion
 ########################################################################################
 
+########################################################################################
+#region update_data()
+########################################################################################
 # update to raise exception
-
 # updates the stored data by requesting new data and storing it into the two files
 def update_data():
     given_word = input("Enter today's known Wordle Word: ")
@@ -121,6 +137,11 @@ def update_data():
     # # log update
     print('LOG: DATA UPDATED')
 ########################################################################################
+#endregion
+########################################################################################
+
+########################################################################################
+#region load_ko()
 ########################################################################################
 # load the ko data to get the dictionary
 def load_ko():
@@ -131,13 +152,18 @@ def load_ko():
     # return the dictionary
     return ko_dict
 ########################################################################################
+#endregion
+########################################################################################
+
+########################################################################################
+#region search_by_date()
 ########################################################################################
 # return the word for a given date, passed in through search_date
 # date string must be in form XXXX-XX-XX in order year-month-day
 
 #update to raise exception
 
-def get_word_by_date(search_date:str):
+def search_by_date(search_date:str):
     #check that date is in correct form
     if not(res(date_pattern, search_date)):
         print('search_date needs to be in form XXXX-XX-XX (year-month-day)')
@@ -152,6 +178,11 @@ def get_word_by_date(search_date:str):
     #return the word
     return word
 ########################################################################################
+#endregion
+########################################################################################
+
+########################################################################################
+#region get_todays_word()
 ########################################################################################
 # returns todays date
 def get_todays_word():
@@ -164,9 +195,14 @@ def get_todays_word():
     # return word of the day
     return word
 ########################################################################################
+#endregion
+########################################################################################
+
+########################################################################################
+#region search_by_word()
 ########################################################################################
 # write function to search by word and get date
-def get_date_by_word():
+def search_by_word():
     search_word = input("Enter word to search: ")
     if not(res(word_pattern, search_word)):
         print('Wordle Word must be five letter word lowercase')
@@ -180,19 +216,16 @@ def get_date_by_word():
         return 'word not in wordlist'
 
 ########################################################################################
+#endregion
+########################################################################################
+
 ########################################################################################
 
 # write function to store words of the month
 
-
-########################################################################################
-########################################################################################
 if __name__ == '__main__':
-    # update_data()
+    update_data()
 
     word = get_todays_word()
 
     print(f'Today\'s word is: {word}')
-
-    while 1:
-        print(get_date_by_word())
