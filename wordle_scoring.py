@@ -1,41 +1,82 @@
+from enum import Enum, auto
+import constants as const
 import ansi
 
-def __pretty_score_guess(guess, wotd):
+_DEBUG_PRINT = False
 
-    pretty_score = [ "" for _ in guess ]
+class CharScore(Enum):
+    CORRECT     = auto()
+    MISPLACED   = auto()
+    INCORRECT   = auto()
 
-    # Map each character in the guess to the number of occurrences
-    wotd_occrs = { char: wotd.count(char)   for char in wotd }
+# Returns a list of colored guesses according to the Wordle scheme:
+#   - Correct: green
+#   - Misplaced: yellow
+#   - Incorrect: gray
+def pretty(guess_list, game_scores):
 
-    # First, handle characters in the correct position
-    remains = []
-    for i in range(5):
-        _gi = guess[i]
-        _wi = wotd[i]
+    # Create a colored string for each guess
+    pretty = []
+    for guess, guess_scores in zip(guess_list, game_scores):
 
-        # if the guess is correct
-        if _gi == _wi:
-            pretty_score[i] = ansi.ansi(_gi).green()
-            wotd_occrs[_wi] -= 1
-        # otherwise, add index to remains list
-        else:
-            remains.append(i)
+        # Generate the string by reading the score of each character of the current guess
+        str_score = ""
+        for char, score in zip(guess, guess_scores):
+            char = ansi.ansi(char)
+            
+            if score == CharScore.CORRECT:      # Correct
+                str_score += char.green()
 
-    # Then, handle misplaced and incorrect characters
-    for i in remains:
-        _gi = guess[i]
-        _wi = wotd[i]
+            elif score == CharScore.MISPLACED:  # Misplaced
+                str_score += char.yellow()
 
-        # if the guess is within the wotd AND at least one unmarked occurence exists 
-        if _gi in wotd and wotd_occrs[_wi] > 0:
-            pretty_score[i] = ansi.ansi(_gi).yellow()
-        else:
-            pretty_score[i] = ansi.ansi(_gi).gray()
+            elif score == CharScore.INCORRECT:  # Incorrect
+                str_score += char.gray()
 
-        wotd_occrs[_wi] -= 1
+            else:                               # Unrecognized, boundary test
+                quit("Unrecognized score type.")
         
-    return "".join(pretty_score)
+        pretty.append(str_score)
 
-def pretty_score_game(guess_list, wotd):
-    pretty_print = [ __pretty_score_guess(guess, wotd) for guess in guess_list ]
-    return pretty_print
+    return pretty
+
+# Assigns a score value (enum CharScore) to each letter in each guess
+# and returns a list of the scores for each guess
+def score_game(guess_list, wotd):
+
+    init_gchar_scores = [ CharScore.INCORRECT ] * const.WORD_LEN
+    init_wchar_counts = { wchar: wotd.count(wchar) for wchar in wotd }
+
+    # Simple helper function to copy the starting score of a guess
+    # and the WOTD character counts
+    def __init_chars():
+        return init_gchar_scores.copy(), init_wchar_counts.copy()
+
+    # Score each guess
+    scored = []
+    for guess in guess_list:
+        gchar_scores, wchar_counts = __init_chars()
+
+        # Mark all correct characters
+        unscored = []
+        for i, (gchar, wchar) in enumerate(zip(guess, wotd)):
+            if gchar == wchar:
+                wchar_counts[wchar] -= 1
+                gchar_scores[i] = CharScore.CORRECT
+            else:
+                unscored.append(i)
+
+        # Mark all misplaced characters
+        for i in unscored:
+            gchar = guess[i]
+            wchar = wotd[i]
+
+            if gchar in wotd:
+                if wchar_counts[gchar] > 0:
+                    wchar_counts[gchar] -= 1
+                    gchar_scores[i] = CharScore.MISPLACED
+        
+        if _DEBUG_PRINT: print(f"\"{guess}\" raw score = {gchar_scores}")
+        scored.append(gchar_scores)
+
+    return scored

@@ -1,4 +1,3 @@
-#!./env/bin/python3
 import cv2
 import pytesseract
 import constants as const

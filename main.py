@@ -1,10 +1,11 @@
 #!./env/bin/python3
-from tracemalloc import start
 import cv2
 import time
 import ansi
 import wordle_image_processing as wip
 import wordle_scoring as ws
+
+_DEBUG_PRINT = False
 
 def main():
     # Get the image
@@ -16,17 +17,23 @@ def main():
         quit("Error: Could not read image.")
 
     # Get guesses from image
-    print( ansi.ansi("Analyzing...").italic(), end=' ' )
-    start   = time.time()
-    guesses = wip.get_guesses(image)
-    end     = time.time()
-    print( ansi.ansi("Finished in %.2fs"%(end - start)).italic() )
+    if _DEBUG_PRINT:
+        print(ansi.ansi("Analyzing image...").italic(), end=' ')
+        start   = time.time()
+        guesses = wip.get_guesses(image)
+        end     = time.time()
+        print(ansi.ansi("Finished in %.2fs"%(end - start)).italic())
+    else:
+        guesses = wip.get_guesses(image)
 
-    # Pretty print scored game
-    scored = ws.pretty_score_game(guesses, "CREAK")
-    for guess in scored:
-        print(guess)
+    # Score the game
+    scores = ws.score_game(guesses, "CREAK")
 
-    return
+    # Pretty print the game
+    pretty = ws.pretty(guesses, scores)
+    for p in pretty:
+        print(p)
+
+    return 0
 
 main()

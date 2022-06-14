@@ -1,6 +1,6 @@
 # Wordle General
 WORD_LEN                = 5     # Wordle word length
-NUM_MAX_WORDS           = 6     # Wordle maximum number of guesses
+# NUM_MAX_GUESSES         = 6     # Wordle maximum number of guesses
 
 # Wordle Image Processing
 CELL_CHECK_FACTOR       = 0.2   # This helps Tesseract produce more consitent and correct characters
