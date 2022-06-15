@@ -138,3 +138,5 @@ credentials.py
 debug_images_dump/
 test_images/
 old_ideas.py
+# credentials file
+credentials.py

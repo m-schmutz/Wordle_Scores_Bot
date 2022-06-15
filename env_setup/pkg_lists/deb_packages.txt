@@ -4,6 +4,7 @@
 # put the name of the package to download 
 
 tesseract-ocr
-
+firefox-geckodriver
+firefox
 
 # Keep this line at bottom of list

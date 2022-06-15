@@ -219,13 +219,28 @@ def search_by_word():
 #endregion
 ########################################################################################
 
+
+
+
+def get_months_words():
+    today = date.today()
+    #ko_dict = load_ko()
+    print(today)
+
+
+
 ########################################################################################
 
 # write function to store words of the month
 
 if __name__ == '__main__':
-    update_data()
+    #update_data()
 
-    word = get_todays_word()
+    # word = get_todays_word()
 
-    print(f'Today\'s word is: {word}')
+    # print(f'Today\'s word is: {word}')
+    # get_months_words()
+
+    ko_dict = load_ko()
+
+    print(ko_dict.keys())
