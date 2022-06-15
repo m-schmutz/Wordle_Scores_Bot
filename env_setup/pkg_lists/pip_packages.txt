@@ -6,5 +6,7 @@ opencv-python
 pytesseract
 numpy
 requests
+discord
+psutil
 
 # Keep this line at the bottom

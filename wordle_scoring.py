@@ -22,23 +22,43 @@ def pretty(guess_list, game_scores):
         # Generate the string by reading the score of each character of the current guess
         str_score = ""
         for char, score in zip(guess, guess_scores):
-            char = ansi.ansi(char)
             
+            char = ansi.ansi(char)
             if score == CharScore.CORRECT:      # Correct
                 str_score += char.green()
-
             elif score == CharScore.MISPLACED:  # Misplaced
                 str_score += char.yellow()
-
             elif score == CharScore.INCORRECT:  # Incorrect
                 str_score += char.gray()
-
             else:                               # Unrecognized, boundary test
                 quit("Unrecognized score type.")
         
         pretty.append(str_score)
 
     return pretty
+
+def plain(guess_list, game_scores):
+
+    plain = []
+    for guess, guess_scores in zip(guess_list, game_scores):
+
+        # Generate the string by reading the score of each character of the current guess
+        str_score = []
+        for char, score in zip(guess, guess_scores):
+            
+            char = ansi.ansi(char)
+            if score == CharScore.CORRECT:      # Correct
+                str_score.append(f"{char}: CORRECT")
+            elif score == CharScore.MISPLACED:  # Misplaced
+                str_score.append(f"{char}: MISPLACED")
+            elif score == CharScore.INCORRECT:  # Incorrect
+                str_score.append(f"{char}: INCORRECT")
+            else:                               # Unrecognized, boundary test
+                quit("Unrecognized score type.")
+        
+        plain.append(str_score)
+
+    return plain
 
 # Assigns a score value (enum CharScore) to each letter in each guess
 # and returns a list of the scores for each guess

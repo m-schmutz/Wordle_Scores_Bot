@@ -11,6 +11,14 @@ CELLS_MASK_THRESH_DARK  = 50
 CHARS_MASK_THRESH_DARK  = 200
 CELLS_MASK_THRESH_LIGHT = 200
 
+# Discord bot
+EMBED_URL       = "https://www.nytimes.com/games/wordle/index.html"
+EMBED_COLOR     = 0x121212
+EMBED_TITLE     = "Wordle - A daily word game"
+EMBED_DESC      = "Guess the hidden word in 6 tries. A new puzzle is available each day."
+EMBED_IMG_NAME  = "wordle.jpg"
+CMD_LINK        = "!link"
+
 
 
 # Tesseract OEM/PSM Configuration Numbers

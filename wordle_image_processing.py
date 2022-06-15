@@ -1,7 +1,9 @@
 import cv2
 import pytesseract
 import constants as const
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool
+from psutil import cpu_count
+import numpy as np
 
 _DEBUG_GEN_IMGS = False
 _DEBUG_PRINT    = False
@@ -69,10 +71,12 @@ def __process_words(img_chars, cells_mask, cells, cell_width):
 
     # Create multiple processes to process character images quickly
     # using half as many cores seems to be the quickest. perhaps tesseract reserves a core itself?
-    raw_num_cores = cpu_count()
-    num_cores     = raw_num_cores // 2
-    if _DEBUG_PRINT: print(f"Detected {raw_num_cores} cores, using {num_cores}.")
-    chars         = Pool(num_cores).map(__try_blurs, cell_imgs)
+    # raw_num_cores = cpu_count()
+    # num_cores     = raw_num_cores // 2
+    # if _DEBUG_PRINT: print(f"Detected {raw_num_cores} cores, using {num_cores}.")
+    num_phys_cores = cpu_count(logical=False)
+    if _DEBUG_PRINT: print(f"Detected {num_phys_cores} physical core{'s' if num_phys_cores > 1 else ''}")
+    chars = Pool(num_phys_cores).map(__try_blurs, cell_imgs)
 
     # Reconstruct the words from the list of characters read by Tesseract
     words    = []
@@ -165,7 +169,10 @@ def __gen_masks(img):
 ### get_guesses:
 ############################################################################################
 # Given a cropped screenshot of a Worlde game, produces a list of the player's guesses.
-def get_guesses(img):
+def get_guesses(img_str):
+
+    nparr = np.frombuffer(img_str, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
     # Generate a mask of the cells and characters
     chars_mask, cells_mask = __gen_masks(img)

@@ -1,39 +1,28 @@
 #!./env/bin/python3
-import cv2
-import time
-import ansi
-import wordle_image_processing as wip
-import wordle_scoring as ws
+import bot
 
-_DEBUG_PRINT = False
+#region Doin' your mom, doi-doin' your mom
+# Here we mimic Wordle's "Word of the Day" (WOTD) function and
+# use the same input data. 
+########## W.I.P. ########## W.I.P. ########## W.I.P. ########## W.I.P. ##########
 
-def main():
-    # Get the image
-    image_path  = "./test_images/dark4.png"
-    image       = cv2.imread(image_path)
+# import word_lists.HAX
+# import time
+# import datetime
 
-    # Make sure it was read properly
-    if image is None:
-        quit("Error: Could not read image.")
+# SEC_PER_DAY = 86400
 
-    # Get guesses from image
-    if _DEBUG_PRINT:
-        print(ansi.ansi("Analyzing image...").italic(), end=' ')
-        start   = time.time()
-        guesses = wip.get_guesses(image)
-        end     = time.time()
-        print(ansi.ansi("Finished in %.2fs"%(end - start)).italic())
-    else:
-        guesses = wip.get_guesses(image)
+# # GMT: Saturday, June 19, 2021 12:00:00 AM
+# epoch_start = int(datetime.datetime(2021, 6, 19, 0, 0, 0, 0).timestamp())
+# epoch_now   = int(time.time())
+# index       = (epoch_now - epoch_start) // SEC_PER_DAY
+# print(f"start = {epoch_start}\nnow = {epoch_now}\nindex = {index}")
 
-    # Score the game
-    scores = ws.score_game(guesses, "CREAK")
+# ko_dict = word_lists.HAX.load_ko()
+# vals = list(ko_dict.values())
+# print("wotd = ", vals[index])
+#endregion
 
-    # Pretty print the game
-    pretty = ws.pretty(guesses, scores)
-    for p in pretty:
-        print(p)
 
-    return 0
-
-main()
+print("Starting bot...")
+bot.run()
