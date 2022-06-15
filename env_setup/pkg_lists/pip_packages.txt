@@ -8,5 +8,6 @@ numpy
 requests
 discord
 psutil
+selenium
 
 # Keep this line at the bottom
