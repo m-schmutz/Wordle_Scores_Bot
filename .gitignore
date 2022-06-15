@@ -131,8 +131,6 @@ dmypy.json
 # vs code things
 .vscode
 
-# bot credentials
-credentials.py
 
 # misc
 debug_images_dump/
