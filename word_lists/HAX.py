@@ -3,6 +3,8 @@ import requests
 from datetime import datetime, timedelta, date
 import re
 import pickle
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
 ########################################################################################
 #region "constants"
 ########################################################################################
@@ -23,6 +25,12 @@ word_pattern = r'[a-z]{5}'
 
 # re.search() function 
 res = re.search
+
+# The offset of the solution word from the beginning of the returned string
+SOLUTION_OFFSET = 105
+
+# Index of the last character of the solution word of the returned string
+END_OF_WORD = 110
 ########################################################################################
 #endregion
 ########################################################################################
@@ -124,14 +132,11 @@ def store_data(ko_dict, wo):
 # update to raise exception
 # updates the stored data by requesting new data and storing it into the two files
 def update_data():
-    given_word = input("Enter today's known Wordle Word: ")
-    if not(res(word_pattern, given_word)):
-        print('Wordle Word must be five letter word lowercase')
-        raise Exception('Invalid word')
+    wotd = get_todays_word()
     # get the two word lists
     ko, wo = get_web_data()
     # #get ko_dict (date to word mappings)
-    ko_dict = map_word_dates(given_word, ko)
+    ko_dict = map_word_dates(wotd, ko)
     # #store the data into the two files
     store_data(ko_dict, wo)
     # # log update
@@ -186,14 +191,26 @@ def search_by_date(search_date:str):
 ########################################################################################
 # returns todays date
 def get_todays_word():
-    # get todays date
-    today = str(date.today())
-    # load ko_dict data
-    ko_dict = load_ko()
-    # get word that corresponds to todays date
-    word = ko_dict[today]
+    # get firefox options
+    firefox_options = Options()
+
+    # add --headless to arguments so that browser instance is not ran in a window
+    firefox_options.add_argument('--headless')
+
+    # start webdriver
+    wd = webdriver.Firefox(options=firefox_options)
+
+    # go to website
+    wd.get("https://www.nytimes.com/games/wordle/index.html")
+
+    # get 'nyt-wordle-state' from local storage
+    item_string = wd.execute_script("return window.localStorage.getItem('nyt-wordle-state')")
+
+    # extract wotd from returned string
+    wotd = item_string[SOLUTION_OFFSET:END_OF_WORD]
+
     # return word of the day
-    return word
+    return wotd
 ########################################################################################
 #endregion
 ########################################################################################
@@ -219,28 +236,10 @@ def search_by_word():
 #endregion
 ########################################################################################
 
-
-
-
-def get_months_words():
-    today = date.today()
-    #ko_dict = load_ko()
-    print(today)
-
-
-
-########################################################################################
-
-# write function to store words of the month
-
+# "main function"
 if __name__ == '__main__':
     #update_data()
 
-    # word = get_todays_word()
+    word = get_todays_word()
 
-    # print(f'Today\'s word is: {word}')
-    # get_months_words()
-
-    ko_dict = load_ko()
-
-    print(ko_dict.keys())
+    print(f'Today\'s word is: {word}')
