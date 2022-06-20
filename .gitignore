@@ -133,8 +133,9 @@ dmypy.json
 
 
 # misc
-debug_images_dump/
 test_images/
-old_ideas.py
+lib/data.p
+
 # credentials file
 credentials.py
+lib/credentials.py
