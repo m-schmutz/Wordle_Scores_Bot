@@ -132,11 +132,8 @@ dmypy.json
 .vscode
 
 
-# misc
-test_images
-test_images/
+# WOTD data
 wordle_lib/data.p
 
 # credentials file
-credentials.py
 wordle_lib/credentials.py
