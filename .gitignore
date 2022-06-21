@@ -134,8 +134,8 @@ dmypy.json
 
 # misc
 test_images/
-lib/data.p
+wordle_lib/data.p
 
 # credentials file
 credentials.py
-lib/credentials.py
+wordle_lib/credentials.py

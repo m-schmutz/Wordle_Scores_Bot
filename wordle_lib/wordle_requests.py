@@ -8,7 +8,7 @@ _DEBUG_PRINT    = False
 
 DATA_PATH       = './data.p'
 EPOCH_START     = int(datetime(2021, 6, 19, 0, 0, 0, 0).timestamp())
-SEC_PER_DAY     = 60 * 60 * 24
+SEC_PER_DAY     = int(60 * 60 * 24)
 HTML_URL        = 'https://www.nytimes.com/games/wordle/index.html'
 HTML_STRBEG     = 'src=\"main.'
 HTML_STREND     = '.js'
@@ -66,7 +66,9 @@ def _update_wotd():
 
     # Save info to file and return the WOTD
     data = { 'day': epoch, 'wotd': wotd }
-    pickle.dump(data, open(DATA_PATH, 'wb'))
+    outfile = open(DATA_PATH, 'wb')
+    pickle.dump(data, outfile)
+    outfile.close()
     if _DEBUG_PRINT: print('WOTD updated!')
 
     return wotd
@@ -81,12 +83,17 @@ def _update_wotd():
 # so that the WOTD can be updated when needed.
 def wotd():
     # Load WOTD data from file
-    try: data = pickle.load(open(DATA_PATH, 'rb'))
+    try: infile = open(DATA_PATH, 'rb')
     except FileNotFoundError:
         return _update_wotd()
 
-    # Data is old
+    data = pickle.load(infile)
+    infile.close()
+
+    # Update data if it's old
     if _epoch_today() > data['day']:
         return _update_wotd()
 
     return data['wotd']
+
+print(wotd())
