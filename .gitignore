@@ -133,6 +133,7 @@ dmypy.json
 
 
 # misc
+test_images
 test_images/
 wordle_lib/data.p
 
