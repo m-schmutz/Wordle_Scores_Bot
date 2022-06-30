@@ -1,10 +1,11 @@
-# DiscordPy Manual: https://discordpy.readthedocs.io/en/stable/api.html
+#!./env/bin/python3
 
+# DiscordPy Manual: https://discordpy.readthedocs.io/en/stable/api.html
 from discord.ext import commands
 from discord import File, Embed
 from wordle_image_processing import get_guesses
 from credentials import bot_token
-# import wordle_scoring as ws
+import wordle_scoring as ws
 
 # CONSTANTS ################################################################################
 ############################################################################################
@@ -86,12 +87,8 @@ async def on_message(message):
 
 
 
-# USER FUNCTIONS ###########################################################################
-############################################################################################
 
-# run: _____________________________________________________________________________________
 # !!! BLOCKING !!! BLOCKING !!! BLOCKING !!! BLOCKING !!! BLOCKING !!! BLOCKING !!! BLOCKING
 # Start the Discord bot.
-def run():
-    bot.run(bot_token)
-    print('Bot stopped.')
+bot.run(bot_token)
+print('bot.py> Done!')

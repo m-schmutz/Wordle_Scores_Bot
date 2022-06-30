@@ -102,17 +102,15 @@ def _process_words(img_chars, cells_mask, cells, cell_width):
             cell_imgs.append(img_chars[(y + offset):(y + inverse_offset), (x + offset):(x + inverse_offset)])
 
     # Create multiple processes to process character images quickly
-    # using half as many cores seems to be the quickest. perhaps tesseract reserves a core itself?
-    # raw_num_cores = cpu_count()
-    # num_cores     = raw_num_cores // 2
-    # if _DEBUG_PRINT: print(f"Detected {raw_num_cores} cores, using {num_cores}.")
-    num_phys_cores  = cpu_count(logical=False)
+    num_phys_cores = cpu_count(logical=False)
     if _DEBUG_PRINT: print(f"Detected {num_phys_cores} physical core{'s' if num_phys_cores > 1 else ''}")
-    chars           = Pool(num_phys_cores).map(_try_blurs, cell_imgs)
+    pool = Pool(num_phys_cores)
+    print('HAHAH')
+    chars = pool.map(_try_blurs, cell_imgs)
 
     # Reconstruct the words from the list of characters read by Tesseract
     num_rows = len(chars) // GUESS_LENGTH
-    words    = []
+    words = []
     for i in range(num_rows):
         beg = i * GUESS_LENGTH
         words.append("".join(chars[beg:(beg + GUESS_LENGTH)]))
