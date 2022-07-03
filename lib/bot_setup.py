@@ -4,9 +4,20 @@ import re
 import lib.ansi as ansi
 import lib.progressbar as pb
 
+REQ_APT = [
+    'firefox-geckodriver',
+    'python3-venv',
+    'tesseract-ocr' ]
+REQ_PIP = [
+    'discord',
+    'opencv-python',
+    'psutil',
+    'pytesseract',
+    'requests',
+    'selenium' ]
 BASH = '/bin/bash'
 VENV = './venv'
-INSTALLS_FILE = 'installs.txt'
+INSTALLS_FILE = './lib/installs.txt'
 
 def _venv_create() -> None:
     print('Creating virtual environment...', end=' ')
@@ -30,9 +41,8 @@ def _venv_run(cmd, daemon=False) -> None:
 def _install_apt_packages() -> None:    
     # Simulate install to get list of packages that will be installed.
     print('Obtaining list of APT packages...', end=' ')
-    proc_sim  = subprocess.run('sudo apt-get -s -y install python3-venv tesseract-ocr', shell=True, capture_output=True)
+    proc_sim  = subprocess.run(f'sudo apt-get -s -y install {" ".join(REQ_APT)}', shell=True, capture_output=True)
     print(ansi.ansi('DONE').green())
-    # quit()
 
     # Compile packages into:
     # 1. Formatted string - "pckg1 pckg2 ... pckgN", for installation command.
@@ -93,7 +103,7 @@ def _install_apt_packages() -> None:
 
 def _install_pip_packages() -> None:
     print('Installing PIP packages for virtual environment...', end=' ')
-    _venv_run('pip3 install opencv-python pytesseract requests discord psutil', daemon=True)
+    _venv_run(f'pip3 install {" ".join(REQ_PIP)}', daemon=True)
     print(ansi.ansi('DONE').green())
     return
 
@@ -154,4 +164,5 @@ def uninstall() -> None:
 
 def start() -> None:
     _venv_run('python3 ./lib/bot.py')
+
     return

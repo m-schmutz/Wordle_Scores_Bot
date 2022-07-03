@@ -14,7 +14,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+#lib/
 lib64/
 parts/
 sdist/
@@ -132,8 +132,6 @@ dmypy.json
 .vscode
 
 
-# WOTD data
-wordle_lib/data.p
-
-# credentials file
-wordle_lib/credentials.py
+# Wordle
+lib/data.p
+lib/credentials.py

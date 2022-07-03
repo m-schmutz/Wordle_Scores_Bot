@@ -4,17 +4,16 @@ from datetime import datetime, time
 
 # CONSTANTS ################################################################################
 ############################################################################################
-_DEBUG_PRINT    = False
-
-DATA_PATH       = './data.p'
-EPOCH_START     = int(datetime(2021, 6, 19, 0, 0, 0, 0).timestamp())
-SEC_PER_DAY     = int(60 * 60 * 24)
-HTML_URL        = 'https://www.nytimes.com/games/wordle/index.html'
-HTML_STRBEG     = 'src=\"main.'
-HTML_STREND     = '.js'
-JS_URL          = 'https://www.nytimes.com/games/wordle/main.{0}.js'
-JS_STRBEG       = 'ko='
-JS_STREND       = ']'
+_DEBUG_PRINT = False
+DATA_PATH    = './data.p'
+EPOCH_START  = int(datetime(2021, 6, 19, 0, 0, 0, 0).timestamp())
+SEC_PER_DAY  = int(60 * 60 * 24)
+HTML_URL     = 'https://www.nytimes.com/games/wordle/index.html'
+HTML_STRBEG  = 'src=\"main.'
+HTML_STREND  = '.js'
+JS_URL       = 'https://www.nytimes.com/games/wordle/main.{0}.js'
+JS_STRBEG    = 'ko='
+JS_STREND    = ']'
 
 # INTERNAL FUNCTIONS #######################################################################
 ############################################################################################
@@ -34,6 +33,9 @@ def _substr_request(url, prefix, sufffix):
     # Search for substring
     raw = res.text
     beg = raw.find(prefix) + len(prefix)
+    beg = raw.find('src=')
+    print(raw[beg-10:beg+10])
+    quit()
     end = raw.find(sufffix, beg)
     assert(beg >= 0 and end >= 0)
 
@@ -50,15 +52,19 @@ def _update_wotd():
     #   2.  The Javascript file which contains the list of known words, ko.
     hash = _substr_request(HTML_URL, HTML_STRBEG, HTML_STREND)
     assert(hash)
+    quit(hash)
     ko_raw = _substr_request(JS_URL.format(hash), JS_STRBEG, JS_STREND)
     assert(ko_raw)
     ko = ko_raw.strip('][').replace('\"', '').split(',')
+    print(ko)
 
     # Here we mimic Wordle's "Word of the Day" (WOTD) function and
     # use the same input data. The start date Wordle uses is:
     #   GMT: Saturday, June 19, 2021 12:00:00 AM
     epoch   = _epoch_today()
     index   = (epoch - EPOCH_START) // SEC_PER_DAY
+    print(f'length of ko = {len(ko)}')
+    quit(f'index = {index}')
     wotd    = ko[index]
     if _DEBUG_PRINT:
         print(f'Today\'s epoch: {epoch}')
@@ -96,4 +102,4 @@ def wotd():
 
     return data['wotd']
 
-print(wotd())
+# print(wotd())
