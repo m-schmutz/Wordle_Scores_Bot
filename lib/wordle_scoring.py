@@ -1,112 +1,81 @@
 from enum import Enum, auto
 import ansi
-
-# CONSTANTS ################################################################################
-############################################################################################
-_DEBUG_PRINT: bool = False
+from wordle_requests import wotd as getWOTD
+from collections import Counter
 
 class CharScore(Enum):
     CORRECT:    int = auto()
     MISPLACED:  int = auto()
     INCORRECT:  int = auto()
 
+    def __str__(self):
+        return self.name
 
+class PlayerGame:
+    def __init__(self, guess_list) -> None:
+        self.guesses = guess_list
+        self.guessCount = len(guess_list)
+        self.scores = self._scoreGame()
+        self.won = all(s == CharScore.CORRECT for s in self.scores[-1])
 
-# USER FUNCTIONS ###########################################################################
-############################################################################################
+    # Returns the character, colored based on it's score.
+    def _colorByScore(self, char, score) -> str:
+        colored_char = ansi.ansi(char)
 
-# pretty: __________________________________________________________________________________
-# Returns a list of colored guesses according to the Wordle scheme:
-#   - Correct: green
-#   - Misplaced: yellow
-#   - Incorrect: gray
-def pretty(guess_list, game_scores):
+        # Correct: Character in the WOTD is identical in this position.
+        if score == CharScore.CORRECT:
+            return colored_char.green()
 
-    # Create a colored string for each guess
-    pretty = []
-    for guess, guess_scores in zip(guess_list, game_scores):
+        # Misplaced: Character is present in the WOTD, but not this position.
+        if score == CharScore.MISPLACED:
+            return colored_char.yellow()
 
-        # Generate the string by reading the score of each character of the current guess
-        str_score = ""
-        for char, score in zip(guess, guess_scores):
-            
-            char = ansi.ansi(char)
-            if score == CharScore.CORRECT:      # Correct
-                str_score += char.green()
-            elif score == CharScore.MISPLACED:  # Misplaced
-                str_score += char.yellow()
-            elif score == CharScore.INCORRECT:  # Incorrect
-                str_score += char.gray()
-            else:                               # Unrecognized, boundary test
-                quit("Unrecognized score type.")
-        
-        pretty.append(str_score)
+        # Incorrect: Character is not present in the WOTD.
+        if score == CharScore.INCORRECT:
+            return colored_char.gray()
 
-    return pretty
+        # Invalid Character Score!
+        print(f'Invalid score type <{score}>. Returning original character.')
+        return char
 
-# plain: ___________________________________________________________________________________
-# Returns a list of raw guess scores.
-def plain(guess_list, game_scores):
+    # Assigns each character a CharScore.
+    def _scoreGame(self) -> 'list[list[CharScore]]':
+        wotd = getWOTD()
 
-    plain = []
-    for guess, guess_scores in zip(guess_list, game_scores):
+        # Score each guess
+        scored = []
+        for guess in self.guesses:
+            guess_scores = [CharScore.INCORRECT] * 5
+            wotd_char_counts = Counter(wotd)
+            unscored = []
 
-        # Generate the string by reading the score of each character of the current guess
-        str_score = []
-        for char, score in zip(guess, guess_scores):
-            
-            char = ansi.ansi(char)
-            if score == CharScore.CORRECT:      # Correct
-                str_score.append(f"{char}: CORRECT")
-            elif score == CharScore.MISPLACED:  # Misplaced
-                str_score.append(f"{char}: MISPLACED")
-            elif score == CharScore.INCORRECT:  # Incorrect
-                str_score.append(f"{char}: INCORRECT")
-            else:                               # Unrecognized, boundary test
-                quit("Unrecognized score type.")
-        
-        plain.append(str_score)
+            # Mark all correct characters
+            for i, (gchar, wchar) in enumerate(zip(guess, wotd)):
+                if gchar == wchar:
+                    wotd_char_counts[wchar] -= 1
+                    guess_scores[i] = CharScore.CORRECT
+                else:
+                    unscored.append(i)
 
-    return plain
+            # Mark all misplaced characters
+            for index in unscored:
+                gchar = guess[index]
+                wchar = wotd[index]
+                if gchar in wotd:
+                    if wotd_char_counts[gchar] > 0:
+                        wotd_char_counts[gchar] -= 1
+                        guess_scores[index] = CharScore.MISPLACED
+            scored.append(guess_scores)
+        return scored
 
-# score_game: ______________________________________________________________________________
-# Assigns a score value (enum CharScore) to each letter in each guess
-# and returns a list of the scores for each guess
-def score_game(guess_list, wotd):
-
-    init_gchar_scores = [ CharScore.INCORRECT ] * 5
-    init_wchar_counts = { wchar: wotd.count(wchar) for wchar in wotd }
-
-    # Simple helper function to copy the starting score of a guess
-    # and the WOTD character counts
-    def __init_chars():
-        return init_gchar_scores.copy(), init_wchar_counts.copy()
-
-    # Score each guess
-    scored = []
-    for guess in guess_list:
-        gchar_scores, wchar_counts = __init_chars()
-
-        # Mark all correct characters
-        unscored = []
-        for i, (gchar, wchar) in enumerate(zip(guess, wotd)):
-            if gchar == wchar:
-                wchar_counts[wchar] -= 1
-                gchar_scores[i] = CharScore.CORRECT
-            else:
-                unscored.append(i)
-
-        # Mark all misplaced characters
-        for i in unscored:
-            gchar = guess[i]
-            wchar = wotd[i]
-
-            if gchar in wotd:
-                if wchar_counts[gchar] > 0:
-                    wchar_counts[gchar] -= 1
-                    gchar_scores[i] = CharScore.MISPLACED
-        
-        if _DEBUG_PRINT: print(f"\"{guess}\" raw score = {gchar_scores}")
-        scored.append(gchar_scores)
-
-    return scored
+    # Returns a list of colored guesses according to the Wordle scheme.
+    def pretty(self) -> 'list[str]':
+        # For each guess...
+        pretty = []
+        for guess, scores in zip(self.guesses, self.scores):
+            # For each character in the guess...
+            str_score = ''
+            for char, score in zip(guess, scores):
+                str_score += self._colorByScore(char, score)
+            pretty.append(str_score)
+        return pretty

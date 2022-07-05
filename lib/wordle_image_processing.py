@@ -57,16 +57,16 @@ def _try_blurs(img):
 
     for blur in BLURS:
         tess_source = cv2.blur( img, blur )
-        char = pytesseract.image_to_string( tess_source, lang="eng", config=CONFIG ).strip()
+        char:str = pytesseract.image_to_string( tess_source, lang="eng", config=CONFIG ).strip()
         if char != "":
-            return char
+            return char.lower()
 
     return None
 
 # _process_words: __________________________________________________________________________
 # Generates a list of words using positional image data and the image img_chars containing
 # each word/guess.
-def _process_words(img_chars, cells_mask, cells, cell_width):
+def _process_words(img_chars, cells_mask, cells, cell_width) -> 'list[str]':
 
     offset = int(cell_width * CELL_WIDTH_FACTOR) # The x/y-offset, in pixels
 
@@ -108,7 +108,7 @@ def _process_words(img_chars, cells_mask, cells, cell_width):
     # num_cores     = raw_num_cores // 2
     # if _DEBUG_PRINT: print(f"Detected {raw_num_cores} cores, using {num_cores}.")
     num_phys_cores  = cpu_count(logical=False)
-    if _DEBUG_PRINT: print(f"Detected {num_phys_cores} physical core{'s' if num_phys_cores > 1 else ''}")
+    if _DEBUG_PRINT: print(f'Detected {num_phys_cores} physical core{"s" if num_phys_cores > 1 else ""}')
     chars           = Pool(num_phys_cores).map(_try_blurs, cell_imgs)
 
     # Reconstruct the words from the list of characters read by Tesseract
@@ -116,8 +116,8 @@ def _process_words(img_chars, cells_mask, cells, cell_width):
     words    = []
     for i in range(num_rows):
         beg = i * GUESS_LENGTH
-        words.append("".join(chars[beg:(beg + GUESS_LENGTH)]))
-    if _DEBUG_PRINT: print("word list =", words)
+        words.append(''.join(chars[beg:(beg + GUESS_LENGTH)]))
+    if _DEBUG_PRINT: print('word list =', words)
 
     return words
 
@@ -195,7 +195,7 @@ def _gen_masks(img:list):
 
 # get_guesses: _____________________________________________________________________________
 # Given a cropped screenshot of a Worlde game, produces a list of the player's guesses.
-def get_guesses(img_bytes:list):
+def get_guesses(img_bytes) -> 'list[str]':
 
     # Convert bytes image to readable format for OpenCV
     nparr = np.frombuffer(img_bytes, np.uint8)

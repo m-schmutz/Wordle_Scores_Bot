@@ -1,6 +1,7 @@
-import os
-import subprocess
-import re
+from os import pipe, fdopen, close
+from subprocess import Popen, run, STDOUT, DEVNULL
+from re import compile, sub, DOTALL
+
 import lib.ansi as ansi
 import lib.progressbar as pb
 
@@ -21,7 +22,7 @@ INSTALLS_FILE = './lib/installs.txt'
 
 def _venv_create() -> None:
     print('Creating virtual environment...', end=' ')
-    subprocess.run(f'python3 -m venv {VENV}', shell=True)
+    run(f'python3 -m venv {VENV}', shell=True)
     print(ansi.ansi('DONE').green())
     return
 
@@ -32,24 +33,24 @@ def _venv_run(cmd, daemon=False) -> None:
         deactivate']
 
     if daemon:
-        subprocess.run(cmds, shell=True, executable=BASH, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        run(cmds, shell=True, executable=BASH, stdout=DEVNULL, stderr=DEVNULL)
     else:
-        subprocess.run(cmds, shell=True, executable=BASH)
+        run(cmds, shell=True, executable=BASH)
 
     return
 
 def _install_apt_packages() -> None:    
     # Simulate install to get list of packages that will be installed.
     print('Obtaining list of APT packages...', end=' ')
-    proc_sim  = subprocess.run(f'sudo apt-get -s -y install {" ".join(REQ_APT)}', shell=True, capture_output=True)
+    proc_sim  = run(f'sudo apt-get -s -y install {" ".join(REQ_APT)}', shell=True, capture_output=True)
     print(ansi.ansi('DONE').green())
 
     # Compile packages into:
     # 1. Formatted string - "pckg1 pckg2 ... pckgN", for installation command.
     # 2. List - [pckg1, pckg2, ..., pckgN], for package count and potential uninstall.
-    regex_sim     = re.compile('The following NEW packages will be installed:\n(.*)\n\d', re.DOTALL)
+    regex_sim     = compile('The following NEW packages will be installed:\n(.*)\n\d', DOTALL)
     regex_result  = regex_sim.search(proc_sim.stdout.decode()).group(1)
-    installs_str  = re.sub('\s+', ' ', regex_result).strip()
+    installs_str  = sub('\s+', ' ', regex_result).strip()
     installs_list = installs_str.split(' ')
 
     # Write list of packages to file for use when uninstalling.
@@ -64,15 +65,15 @@ def _install_apt_packages() -> None:
     progress = 0
 
     # Setup for parsing the output from installation
-    regex_get    = re.compile('^Get:\d+ [^ ]+ [^ ]+ [^ ]+ ([^ ]+) .*')
-    regex_unpack = re.compile('^Unpacking ([^ ]+) .*')
-    regex_setup  = re.compile('^Setting up ([^ ]+) .*')
-    rfd, wfd     = os.pipe()
-    r            = os.fdopen(rfd, newline='')
+    regex_get    = compile('^Get:\d+ [^ ]+ [^ ]+ [^ ]+ ([^ ]+) .*')
+    regex_unpack = compile('^Unpacking ([^ ]+) .*')
+    regex_setup  = compile('^Setting up ([^ ]+) .*')
+    rfd, wfd     = pipe()
+    r            = fdopen(rfd, newline='')
 
     # Install the packages!
-    proc = subprocess.Popen(f'sudo apt-get -y install {installs_str}', shell=True, stdout=wfd, stderr=subprocess.STDOUT)
-    os.close(wfd)
+    proc = Popen(f'sudo apt-get -y install {installs_str}', shell=True, stdout=wfd, stderr=STDOUT)
+    close(wfd)
     while proc.poll() == None:
         line = r.readline()
 
@@ -97,8 +98,7 @@ def _install_apt_packages() -> None:
             progbar.update(progress, f'Setting up {match_setup.group(1)}...')
             continue
         
-    os.close(rfd)
-
+    close(rfd)
     return
 
 def _install_pip_packages() -> None:
@@ -113,19 +113,17 @@ def install() -> None:
     _install_pip_packages()
 
     print('Wordle Bot successfully installed.')
-
     return
 
 def uninstall() -> None:
     # Remove virtual environment (this includes all pip packages).
     print('Removing virtual environment and all PIP packages...', end=' ')
-    subprocess.run([f'sudo rm -r {VENV}'], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    run([f'sudo rm -r {VENV}'], shell=True, stdout=DEVNULL, stderr=DEVNULL)
     print(ansi.ansi('DONE').green())
 
     # Read list of APT packages that were installed.
     with open(INSTALLS_FILE, 'r') as f:
-        packages = f.readlines()
-    packages = [p.strip() for p in packages]
+        packages = [line.strip() for line in f.readlines()]
 
     # Initialize the progress bar.
     progbar = pb.ProgressBar(
@@ -135,13 +133,13 @@ def uninstall() -> None:
     progress = 0
 
     # Setup for parsing output of uninstall.
-    regex_remove = re.compile('^Removing ([^ ]+) .*')
-    rfd, wfd     = os.pipe()
-    r            = os.fdopen(rfd, newline='')
+    regex_remove = compile('^Removing ([^ ]+) .*')
+    rfd, wfd     = pipe()
+    r            = fdopen(rfd, newline='')
 
     # Remove apt packages that were installed.
-    proc = subprocess.Popen([f'sudo apt-get -y purge {" ".join(packages)}'], shell=True, stdout=wfd, stderr=subprocess.STDOUT)
-    os.close(wfd)
+    proc = Popen([f'sudo apt-get -y purge {" ".join(packages)}'], shell=True, stdout=wfd, stderr=STDOUT)
+    close(wfd)
     while proc.poll() == None:
         line = r.readline()
 
@@ -151,18 +149,16 @@ def uninstall() -> None:
             progbar.update(progress, f'Removing {match_remove.group(1)}...')
             continue
 
-    os.close(rfd)
+    close(rfd)
 
     # Clear the cache as good practice.
     print('Cleaning up...', end=' ')
-    subprocess.run(['sudo apt-get clean'], shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    run(['sudo apt-get clean'], shell=True, stdout=DEVNULL, stderr=DEVNULL)
     print(ansi.ansi('DONE').green())
     
     print('Wordle Bot successfully uninstalled.')
-    
     return
 
 def start() -> None:
     _venv_run('python3 ./lib/bot.py')
-
     return
