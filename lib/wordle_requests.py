@@ -3,7 +3,7 @@ from selenium.webdriver.firefox.service import Service
 from os import stat
 from datetime import datetime
 
-DATA_PATH = './lib/data.txt'
+WOTD_PATH = './lib/wotd.txt'
 
 # Firefox Browser Options
 options = webdriver.FirefoxOptions()
@@ -34,17 +34,16 @@ def _update():
     wotd = _scrape_wotd()
 
     # Write WOTD to file.
-    with open(DATA_PATH, 'w') as f:
+    with open(WOTD_PATH, 'w') as f:
         f.write(wotd)
 
     return wotd
 
 # Returns the WOTD.
 def wotd():
-
     # Get timestamp of last modification to data.
     # This should only raise an exception initially, when the data has not yet been initialized.
-    try: file_modified_epoch = stat(DATA_PATH).st_mtime
+    try: file_modified_epoch = stat(WOTD_PATH).st_mtime
     except FileNotFoundError:
         return _update()
 
@@ -55,5 +54,5 @@ def wotd():
         return _update()
 
     # WOTD on file is valid, so return it.
-    with open(DATA_PATH, 'r') as f:
+    with open(WOTD_PATH, 'r') as f:
         return f.read()
