@@ -1,105 +1,58 @@
-import requests
-import pickle
-from datetime import datetime, time
+from selenium import webdriver
+from selenium.webdriver.firefox.service import Service
+from os import stat
+from datetime import datetime
 
-# CONSTANTS ################################################################################
-############################################################################################
-_DEBUG_PRINT = False
-DATA_PATH    = './data.p'
-EPOCH_START  = int(datetime(2021, 6, 19, 0, 0, 0, 0).timestamp())
-SEC_PER_DAY  = int(60 * 60 * 24)
-HTML_URL     = 'https://www.nytimes.com/games/wordle/index.html'
-HTML_STRBEG  = 'src=\"main.'
-HTML_STREND  = '.js'
-JS_URL       = 'https://www.nytimes.com/games/wordle/main.{0}.js'
-JS_STRBEG    = 'ko='
-JS_STREND    = ']'
+WOTD_PATH = './lib/wotd.txt'
 
-# INTERNAL FUNCTIONS #######################################################################
-############################################################################################
+# Firefox Browser Options
+options = webdriver.FirefoxOptions()
+options.headless = True
+options.page_load_strategy = 'eager'
 
-# _epoch_today: ____________________________________________________________________________
-# Round the current EPOCH time down to nearest day (12:00 a.m.)
-def _epoch_today():
-    return int(datetime.combine(datetime.now(), time.min).timestamp())
+# Firefox Service Object
+driverService = Service(log_path='./lib/geckodriver.log')
 
-# _substr_request: _________________________________________________________________________
-# Find the first occurence of a substring, that begins with *prefix* and ends
-# with *suffix*, within the *.text* field of the response.
-def _substr_request(url, prefix, sufffix):
-    # Request the provided url
-    res = requests.get(url)
+# Webscrapes the official Wordle webpage for the WOTD
+def _scrape_wotd():
+    # Create the Selenium webdriver
+    driver = webdriver.Firefox(options=options, service=driverService)
 
-    # Search for substring
-    raw = res.text
-    beg = raw.find(prefix) + len(prefix)
-    beg = raw.find('src=')
-    print(raw[beg-10:beg+10])
-    quit()
-    end = raw.find(sufffix, beg)
-    assert(beg >= 0 and end >= 0)
+    # GET webpage and parse localStorage for WOTD.
+    driver.get('https://www.nytimes.com/games/wordle/index.html')
+    nyt_wordle_state:str = driver.execute_script('return window.localStorage.getItem("nyt-wordle-state")')
+    wotd = nyt_wordle_state.split('"solution":"')[1][:5] # about twice as fast as json.loads()
 
-    # Return the substring
-    return raw[beg:end]
-
-# _update_wotd: ____________________________________________________________________________
-# Using the requests module, we retrieve and parse the relavant data from
-# Wordle's website. The data is then saved to file. This should only be
-# called by *wotd()* when a new day is detected.
-def _update_wotd():
-    # Request the necessary data from their website.
-    #   1.  The main Wordle webpage to obtain the JavaScript sourcefile name.
-    #   2.  The Javascript file which contains the list of known words, ko.
-    hash = _substr_request(HTML_URL, HTML_STRBEG, HTML_STREND)
-    assert(hash)
-    quit(hash)
-    ko_raw = _substr_request(JS_URL.format(hash), JS_STRBEG, JS_STREND)
-    assert(ko_raw)
-    ko = ko_raw.strip('][').replace('\"', '').split(',')
-    print(ko)
-
-    # Here we mimic Wordle's "Word of the Day" (WOTD) function and
-    # use the same input data. The start date Wordle uses is:
-    #   GMT: Saturday, June 19, 2021 12:00:00 AM
-    epoch   = _epoch_today()
-    index   = (epoch - EPOCH_START) // SEC_PER_DAY
-    print(f'length of ko = {len(ko)}')
-    quit(f'index = {index}')
-    wotd    = ko[index]
-    if _DEBUG_PRINT:
-        print(f'Today\'s epoch: {epoch}')
-        print(f'ko[{index}]: {wotd}')
-
-    # Save info to file and return the WOTD
-    data = { 'day': epoch, 'wotd': wotd }
-    outfile = open(DATA_PATH, 'wb')
-    pickle.dump(data, outfile)
-    outfile.close()
-    if _DEBUG_PRINT: print('WOTD updated!')
+    # WILL LEAK MEMORY IF NOT CLOSED
+    driver.quit()
 
     return wotd
 
+# Updates local data and returns the WOTD.
+def _update():
+    # Webscrape for WOTD.
+    wotd = _scrape_wotd()
 
+    # Write WOTD to file.
+    with open(WOTD_PATH, 'w') as f:
+        f.write(wotd)
 
-# USER FUNCTIONS ###########################################################################
-############################################################################################
+    return wotd
 
-# wotd: ____________________________________________________________________________________
-# Returns the WOTD. This compares the current day's epoch with that of the file
-# so that the WOTD can be updated when needed.
+# Returns the WOTD.
 def wotd():
-    # Load WOTD data from file
-    try: infile = open(DATA_PATH, 'rb')
+    # Get timestamp of last modification to data.
+    # This should only raise an exception initially, when the data has not yet been initialized.
+    try: file_modified_epoch = stat(WOTD_PATH).st_mtime
     except FileNotFoundError:
-        return _update_wotd()
+        return _update()
 
-    data = pickle.load(infile)
-    infile.close()
+    # If WOTD is old, update and return the new WOTD.
+    today = datetime.now().date()
+    day_modified = datetime.fromtimestamp(file_modified_epoch).date()
+    if (today > day_modified):
+        return _update()
 
-    # Update data if it's old
-    if _epoch_today() > data['day']:
-        return _update_wotd()
-
-    return data['wotd']
-
-# print(wotd())
+    # WOTD on file is valid, so return it.
+    with open(WOTD_PATH, 'r') as f:
+        return f.read()
