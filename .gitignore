@@ -133,7 +133,7 @@ dmypy.json
 
 
 # Wordle
-lib/__pycache__
+lib/__pycache__/
 lib/credentials.py
 lib/data.p
 lib/geckodriver.log
