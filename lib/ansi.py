@@ -1,30 +1,43 @@
+def _esc(val):
+    return f'\033[{val}'
+
 class ansi:
-    _reset      = "\033[0m"
-    _bold       = "\033[1m"
-    _italic     = "\033[3m"
-    _underline  = "\033[4m"
+
+    CLEARLINE   = _esc('2K')
+    CURSOR_UP   = _esc('1A')
+    HIDE_CURSOR = _esc('?25l')
+    SHOW_CURSOR = _esc('?25h')
+
+    _reset      = _esc('0m')
+    _bold       = _esc('1m')
+    _italic     = _esc('3m')
+    _underline  = _esc('4m')
 
     class fg:
-        black   = "\033[30m"
-        red     = "\033[31m"
-        green   = "\033[32m"
-        yellow  = "\033[33m"
-        blue    = "\033[34m"
-        magenta = "\033[35m"
-        cyan    = "\033[36m"
-        white   = "\033[37m"
-        def rgb(r, g, b): return f"\033[38;2;{r};{g};{b}m"
+        black   = _esc('30m')
+        red     = _esc('31m')
+        green   = _esc('32m')
+        yellow  = _esc('33m')
+        blue    = _esc('34m')
+        magenta = _esc('35m')
+        cyan    = _esc('36m')
+        white   = _esc('37m')
+
+        def rgb(r, g, b):
+            return _esc(f'38;2;{r};{g};{b}m')
 
     class bg:
-        black   = "\033[40m"
-        red     = "\033[41m"
-        green   = "\033[42m"
-        yellow  = "\033[43m"
-        blue    = "\033[44m"
-        magenta = "\033[45m"
-        cyan    = "\033[46m"
-        white   = "\033[47m"
-        def rgb(r, g, b): return f"\033[48;2;{r};{g};{b}m"
+        black   = _esc('40m')
+        red     = _esc('41m')
+        green   = _esc('42m')
+        yellow  = _esc('43m')
+        blue    = _esc('44m')
+        magenta = _esc('45m')
+        cyan    = _esc('46m')
+        white   = _esc('47m')
+
+        def rgb(r, g, b):
+            return _esc(f'48;2;{r};{g};{b}m')
 
     def __init__(self, string):
         self._string = string
