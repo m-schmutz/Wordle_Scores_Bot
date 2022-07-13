@@ -1,44 +1,40 @@
 # Tesseract Manual: https://github.com/tesseract-ocr/tesseract/blob/main/doc/tesseract.1.asc
 
 import cv2
-import numpy as np
-import pytesseract
+from numpy import frombuffer, uint8
+from pytesseract import pytesseract, image_to_string
 from multiprocessing import Pool
 from psutil import cpu_count
 
-pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
+pytesseract.tesseract_cmd = '/usr/bin/tesseract'
 
-# CONSTANTS ################################################################################
-############################################################################################
+### CONSTANTS #################################################################################
+
 _DEBUG_GEN_IMGS     = False
 _DEBUG_PRINT        = True
+_TESS_ORIG          = 0     # "Original Tesseract only."
+_TESS_NEURAL_LSTM   = 1     # "Neural nets LSTM only."
+_TESS_TESS_LSTM     = 2     # "Tesseract + LSTM."
+_TESS_OEM_DEFAULT   = 3     # "Default, based on what is available."
+_TESS_OSD           = 0     # "Orientation and script detection (OSD) only."
+_TESS_AUTO_OSD      = 1     # "Automatic page segmentation with OSD."
+_TESS_AUTO          = 2     # "Automatic page segmentation, but no OSD, or OCR. (not implemented)"
+_TESS_PSM_DEFAULT   = 3     # "Fully automatic page segmentation, but no OSD. (Default)"
+_TESS_SINGLE_COL    = 4     # "Assume a single column of text of variable sizes."
+_TESS_SINGLE_VBLOCK = 5     # "Assume a single uniform block of vertically aligned text."
+_TESS_SINGLE_BLOCK  = 6     # "Assume a single uniform block of text."
+_TESS_SINGLE_LINE   = 7     # "Treat the image as a single text line."
+_TESS_SINGLE_WORD   = 8     # "Treat the image as a single word."
+_TESS_CIRCLE        = 9     # "Treat the image as a single word in a circle."
+_TESS_SINGLE_CHAR   = 10    # "Treat the image as a single character."
+_TESS_SPARSE        = 11    # "Sparse text. Find as much text as possible in no particular order."
+_TESS_SPARSE_OSD    = 12    # "Sparse text with OSD."
+_TESS_RAW_LINE      = 13    # "Raw line. Treat the image as a single text line, bypassing hacks that are Tesseract-specific."
 
-#region Tesseract Config Constants
-_ORIG:int           = 0     # "Original Tesseract only."
-_NEURAL_LSTM:int    = 1     # "Neural nets LSTM only."
-_TESS_LSTM:int      = 2     # "Tesseract + LSTM."
-_OEM_DEFAULT:int    = 3     # "Default, based on what is available."
-_OSD:int            = 0     # "Orientation and script detection (OSD) only."
-_AUTO_OSD:int       = 1     # "Automatic page segmentation with OSD."
-_AUTO:int           = 2     # "Automatic page segmentation, but no OSD, or OCR. (not implemented)"
-_PSM_DEFAULT:int    = 3     # "Fully automatic page segmentation, but no OSD. (Default)"
-_SINGLE_COL:int     = 4     # "Assume a single column of text of variable sizes."
-_SINGLE_VBLOCK:int  = 5     # "Assume a single uniform block of vertically aligned text."
-_SINGLE_BLOCK:int   = 6     # "Assume a single uniform block of text."
-_SINGLE_LINE:int    = 7     # "Treat the image as a single text line."
-_SINGLE_WORD:int    = 8     # "Treat the image as a single word."
-_CIRCLE:int         = 9     # "Treat the image as a single word in a circle."
-_SINGLE_CHAR:int    = 10    # "Treat the image as a single character."
-_SPARSE:int         = 11    # "Sparse text. Find as much text as possible in no particular order."
-_SPARSE_OSD:int     = 12    # "Sparse text with OSD."
-_RAW_LINE:int       = 13    # "Raw line. Treat the image as a single text line, bypassing hacks that are Tesseract-specific."
-_WHITELIST:str      = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-#endregion
-
+WHITELIST           = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 CELL_WIDTH_FACTOR   = 0.2   # This helps Tesseract produce more consitent and correct characters
-CONFIG              = f'--oem {_OEM_DEFAULT} --psm {_SINGLE_CHAR} -c tessedit_char_whitelist={_WHITELIST}'
+CONFIG              = f'--oem {_TESS_OEM_DEFAULT} --psm {_TESS_SINGLE_CHAR} -c tessedit_char_whitelist={WHITELIST}'
 GUESS_LENGTH        = 5
-
 BLURS               = [ (3,3), (5,5), (3,5), (5,3), (1,5), (5,1) ]  # idk seemed to resolve all misreads i saw NOTE output all images of given test case to see whats happening
 MAX_THRESH          = 255               # Maximum grayscale pixel value
 THEME_THRESH        = MAX_THRESH // 2   # Comparison value to choose theme code path
@@ -46,27 +42,23 @@ BOTH_MASK_THRESH    = 200               # Used for Light theme
 CELLS_MASK_THRESH   = 50                # Used for Dark theme
 CHARS_MASK_THRESH   = 200               # Used for Dark theme
 
+### INTERNAL USE ##############################################################################
 
-# INTERNAL FUNCTIONS #######################################################################
-############################################################################################
-
-# _try_blurs: ______________________________________________________________________________
+# _try_blurs: _____________________________________________________________________________
 # Attempts to extract a character from an image slice using a variety of different blur
 # factors, BLUR_FACTORS. If it returns None, no character could be read by Tesseract.
 def _try_blurs(img):
-
     for blur in BLURS:
-        tess_source = cv2.blur( img, blur )
-        char:str = pytesseract.image_to_string( tess_source, lang="eng", config=CONFIG ).strip()
-        if char != "":
+        blurred_img = cv2.blur( img, blur )
+        char:str = image_to_string( blurred_img, lang="eng", config=CONFIG ).strip()
+        if char in WHITELIST:
             return char.lower()
-
     return None
 
-# _process_words: __________________________________________________________________________
+# _process_words: _________________________________________________________________________
 # Generates a list of words using positional image data and the image img_chars containing
 # each word/guess.
-def _process_words(img_chars, cells_mask, cells, cell_width) -> 'list[str]':
+def _process_words(img_chars, cells_mask, cells:list, cell_width) -> 'list[str]':
 
     offset = int(cell_width * CELL_WIDTH_FACTOR) # The x/y-offset, in pixels
 
@@ -107,9 +99,9 @@ def _process_words(img_chars, cells_mask, cells, cell_width) -> 'list[str]':
     # raw_num_cores = cpu_count()
     # num_cores     = raw_num_cores // 2
     # if _DEBUG_PRINT: print(f"Detected {raw_num_cores} cores, using {num_cores}.")
-    num_phys_cores  = cpu_count(logical=False)
+    num_phys_cores = cpu_count(logical=False)
     if _DEBUG_PRINT: print(f'Detected {num_phys_cores} physical core{"s" if num_phys_cores > 1 else ""}')
-    chars           = Pool(num_phys_cores).map(_try_blurs, cell_imgs)
+    chars = Pool(num_phys_cores).map(_try_blurs, cell_imgs)
 
     # Reconstruct the words from the list of characters read by Tesseract
     num_rows = len(chars) // GUESS_LENGTH
@@ -121,7 +113,7 @@ def _process_words(img_chars, cells_mask, cells, cell_width) -> 'list[str]':
 
     return words
 
-# _is_uniform: _____________________________________________________________________________
+# _is_uniform: ____________________________________________________________________________
 # Returns True when all items in the array are list-equivalent
 def _is_uniform(arr:list):
     sample = arr[0]
@@ -130,7 +122,7 @@ def _is_uniform(arr:list):
             return False
     return True
 
-# _validate_margin: ________________________________________________________________________
+# _validate_margin: _______________________________________________________________________
 # We test the outermost edges of the image to disallow the image submission
 # to be processed. By demanding a more structured input, we alleviate the amount
 # of processing necessary.
@@ -157,7 +149,7 @@ def _validate_margin(img:list):
 
     return True
 
-# _get_masks: ______________________________________________________________________________
+# _get_masks: _____________________________________________________________________________
 # Generate a mask for both the character cells and the characters themselves.
 def _gen_masks(img:list):
 
@@ -188,17 +180,14 @@ def _gen_masks(img:list):
 
     return chars_mask, cells_mask
 
+### EXTERNAL USE ##############################################################################
 
-
-# USER FUNCTIONS ###########################################################################
-############################################################################################
-
-# get_guesses: _____________________________________________________________________________
+# guessesFromImage: ____________________________________________________________________________
 # Given a cropped screenshot of a Worlde game, produces a list of the player's guesses.
-def get_guesses(img_bytes) -> 'list[str]':
+def guessesFromImage(bytes: bytes) -> 'list[str]':
 
     # Convert bytes image to readable format for OpenCV
-    nparr = np.frombuffer(img_bytes, np.uint8)
+    nparr = frombuffer(bytes, uint8)
     img   = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
     # Generate a mask of the cells and characters

@@ -134,7 +134,12 @@ dmypy.json
 
 # Wordle
 lib/__pycache__/
+lib/*.py[cod]
+lib/*$py.class
+lib/*.backup
+
 lib/credentials.py
-lib/data.txt
 lib/geckodriver.log
 lib/installs.txt
+lib/playground.py
+lib/wotd.txt

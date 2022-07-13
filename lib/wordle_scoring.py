@@ -11,12 +11,14 @@ class CharScore(Enum):
     def __str__(self):
         return self.name
 
-class PlayerGame:
-    def __init__(self, guess_list) -> None:
-        self.guesses = guess_list
-        self.guessCount = len(guess_list)
-        self.scores = self._scoreGame()
-        self.won = all(s == CharScore.CORRECT for s in self.scores[-1])
+class WordleGame:
+    def __init__(self, guesses: 'list[str]') -> None:
+        self.wotd: str = getWOTD()
+        self.guesses: list[str] = guesses
+        self.numGuesses: int = len(guesses)
+
+        self.scores: list[list[CharScore]] = self._scoreGame()
+        self.won: bool = all(s == CharScore.CORRECT for s in self.scores[-1])
 
     # Returns the character, colored based on it's score.
     def _colorByScore(self, char, score) -> str:
@@ -40,17 +42,15 @@ class PlayerGame:
 
     # Assigns each character a CharScore.
     def _scoreGame(self) -> 'list[list[CharScore]]':
-        wotd = getWOTD()
-
         # Score each guess
         scored = []
         for guess in self.guesses:
             guess_scores = [CharScore.INCORRECT] * 5
-            wotd_char_counts = Counter(wotd)
+            wotd_char_counts = Counter(self.wotd)
             unscored = []
 
             # Mark all correct characters
-            for i, (gchar, wchar) in enumerate(zip(guess, wotd)):
+            for i, (gchar, wchar) in enumerate(zip(guess, self.wotd)):
                 if gchar == wchar:
                     wotd_char_counts[wchar] -= 1
                     guess_scores[i] = CharScore.CORRECT
@@ -60,11 +60,12 @@ class PlayerGame:
             # Mark all misplaced characters
             for index in unscored:
                 gchar = guess[index]
-                wchar = wotd[index]
-                if gchar in wotd:
+                wchar = self.wotd[index]
+                if gchar in self.wotd:
                     if wotd_char_counts[gchar] > 0:
                         wotd_char_counts[gchar] -= 1
                         guess_scores[index] = CharScore.MISPLACED
+            
             scored.append(guess_scores)
         return scored
 

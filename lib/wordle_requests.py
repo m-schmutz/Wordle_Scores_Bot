@@ -20,7 +20,7 @@ def _scrape_wotd():
 
     # GET webpage and parse localStorage for WOTD.
     driver.get('https://www.nytimes.com/games/wordle/index.html')
-    wotd:str = driver.execute_script('return JSON.parse(this.localStorage.getItem(\'nyt-wordle-state\')).solution')
+    wotd = driver.execute_script('return JSON.parse(this.localStorage.getItem(\'nyt-wordle-state\')).solution')
     
     # WILL LEAK MEMORY IF NOT CLOSED
     driver.quit()
