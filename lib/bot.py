@@ -6,6 +6,14 @@ from chimp import ChimpView
 from wordle_image_processing import guessesFromImage
 from wordle_scoring import WordleGame
 
+
+# Dummy database
+class Database:
+    def __init__(self) -> None:
+        pass
+    def update_user(self, username: str, solved: bool, guesses: int, greens: int, yellows: int):
+        return
+
 class WordleBot(commands.Bot):
     def __init__(self) -> None:
         super().__init__(
@@ -46,11 +54,12 @@ class WordleBot(commands.Bot):
             return
 
         # Capture the game
-        await message.channel.send(
-            content = self.responseToGame(
-                game = WordleGame(
-                    guesses = guessesFromImage(
-                        bytes = await user_attachment.read()))))
+        
+        # await message.channel.send(
+        #     content = self.responseToGame(
+        #         game = WordleGame(
+        #             guesses = guessesFromImage(
+        #                 bytes = await user_attachment.read()))))
         return
 
     # OVERRIDE discord.on_message():
@@ -91,42 +100,9 @@ class WordleBot(commands.Bot):
 
 bot = WordleBot()
 
-### EVENTS ####################################################################################
-
-### on_message ___________________________________________________________________________
-# @bot.event
-# async def on_message(message: discord.Message):
-#     if message.author.bot:
-#         return
-
-#     # If message contains attachments...
-#     if message.attachments:
-#         user_attachment = message.attachments[0]
-
-#         # Restrict attachments to one per message
-#         if len(message.attachments) > 1:
-#             await message.delete()
-#             await message.channel.send(f'*<deleted {message.author.name}\'s message>* One at a time please!\n(っ◔◡◔)っ ♥ that\'s what she said ♥')
-
-#         # Only allow if it's tagged with spoiler
-#         elif not user_attachment.is_spoiler():
-#             await message.delete()
-#             await message.channel.send(f'*<deleted {message.author.name}\'s image>*\nPlease mark your image as spoiler 😎')
-
-#         # Capture the game
-#         else:
-#             img_bytes = await user_attachment.read()
-#             game = WordleGame(get_guesses(img_bytes))
-
-#             response = bot.responseToGame(game)
-#             await message.channel.send(response)
-
-#     # Remind the discord.ext.commands.Bot to parse the message for commands
-#     await bot.process_commands(message)
-#     return
-
 ### APPLICATION COMMANDS ######################################################################
-
+### /chimp
+# chimp game
 @bot.tree.command(name='chimp', description='Are you smarter than a chimp? Play this quick memorization game to find out!', guild=bot.guild)
 async def chimp(interaction: discord.Interaction):
     chimp = ChimpView()
@@ -157,7 +133,7 @@ async def choose(interaction: discord.Interaction, choices: str):
     await interaction.response.send_message(choice)
     return
 
-### START THE BOT #############################################################################
 
+### START THE BOT #############################################################################
 bot.run(bot_token)
 print('bot.py DONE')

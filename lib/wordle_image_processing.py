@@ -1,5 +1,6 @@
 # Tesseract Manual: https://github.com/tesseract-ocr/tesseract/blob/main/doc/tesseract.1.asc
 
+from typing import Any
 import cv2
 from numpy import frombuffer, uint8
 from pytesseract import pytesseract, image_to_string
@@ -182,9 +183,9 @@ def _gen_masks(img:list):
 
 ### EXTERNAL USE ##############################################################################
 
-# guessesFromImage: ____________________________________________________________________________
+# image_to_guess_list: ____________________________________________________________________
 # Given a cropped screenshot of a Worlde game, produces a list of the player's guesses.
-def guessesFromImage(bytes: bytes) -> 'list[str]':
+def image_to_guess_list(bytes: bytes) -> 'list[str]':
 
     # Convert bytes image to readable format for OpenCV
     nparr = frombuffer(bytes, uint8)
@@ -218,3 +219,39 @@ def guessesFromImage(bytes: bytes) -> 'list[str]':
 
     # Finally, we can construct a list of the words using Tesseract
     return _process_words(chars_mask, cells_mask, cells, cell_width)
+
+
+
+from typing import Any
+import cv2
+import numpy as np
+
+class WordleImageProcessor:
+
+    def __init__(self, *, image: bytes) -> None:
+        self.original_bytes: bytes = image
+
+        self.image: np.ndarray = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+        self.grayscale_mat = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+        self.character_contours: Any = None
+        self.character_cell_contours: Any = None
+        self.characters_mask: Any = None
+        self.character_cells_mask: Any = None
+        self.dark_theme: bool = None
+        self.guess_list: list[str] = None
+
+    def _gen_masks(self) -> None:
+        return
+
+fd = open('wordle.png', 'rb')
+image_bytes = fd.read()
+fd.close()
+
+wordle_image = WordleImageProcessor(image=image_bytes)
+cv2.imwrite('grayscale_mat.png', wordle_image.grayscale_mat)
+_, cells_mask = cv2.threshold(wordle_image.grayscale_mat, CELLS_MASK_THRESH, MAX_THRESH, cv2.THRESH_BINARY)
+cv2.imwrite('cells_mask.png', cells_mask)
+cell_contours, _ = cv2.findContours(cells_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+print(len(cell_contours), len(cell_contours[0]))
+drawn = cv2.drawContours(wordle_image.image, cell_contours, -1, (0,0,255))
+cv2.imwrite('contours.png', drawn)

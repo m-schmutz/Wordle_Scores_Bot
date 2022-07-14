@@ -1,6 +1,7 @@
 from enum import Enum, auto
 import ansi
-from wordle_requests import wotd as getWOTD
+from wordle_requests import wotd
+from wordle_image_processing import image_to_guess_list
 from collections import Counter
 
 class CharScore(Enum):
@@ -12,12 +13,12 @@ class CharScore(Enum):
         return self.name
 
 class WordleGame:
-    def __init__(self, guesses: 'list[str]') -> None:
-        self.wotd: str = getWOTD()
-        self.guesses: list[str] = guesses
-        self.numGuesses: int = len(guesses)
-
+    def __init__(self, image: bytes) -> None:
+        self.image: bytes = image
+        self.guesses: list[str] = image_to_guess_list(bytes=self.image)
+        self.numGuesses: int = len(self.guesses)
         self.scores: list[list[CharScore]] = self._scoreGame()
+        self.solution: str = wotd()
         self.won: bool = all(s == CharScore.CORRECT for s in self.scores[-1])
 
     # Returns the character, colored based on it's score.
@@ -46,11 +47,11 @@ class WordleGame:
         scored = []
         for guess in self.guesses:
             guess_scores = [CharScore.INCORRECT] * 5
-            wotd_char_counts = Counter(self.wotd)
+            wotd_char_counts = Counter(self.solution)
             unscored = []
 
             # Mark all correct characters
-            for i, (gchar, wchar) in enumerate(zip(guess, self.wotd)):
+            for i, (gchar, wchar) in enumerate(zip(guess, self.solution)):
                 if gchar == wchar:
                     wotd_char_counts[wchar] -= 1
                     guess_scores[i] = CharScore.CORRECT
@@ -60,8 +61,8 @@ class WordleGame:
             # Mark all misplaced characters
             for index in unscored:
                 gchar = guess[index]
-                wchar = self.wotd[index]
-                if gchar in self.wotd:
+                wchar = self.solution[index]
+                if gchar in self.solution:
                     if wotd_char_counts[gchar] > 0:
                         wotd_char_counts[gchar] -= 1
                         guess_scores[index] = CharScore.MISPLACED

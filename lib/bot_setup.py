@@ -43,7 +43,17 @@ def _venv_run(cmd, daemon=False) -> None:
 
     return
 
-def _install_apt_packages() -> None:    
+def _install_apt_packages() -> None:
+    # Update apt
+    print('Making sure apt is updated...')
+    if _SUBP:
+        run(f'sudo apt -y update', shell=True, stdout=DEVNULL, stderr=DEVNULL)
+        run(f'sudo apt -y upgrade', shell=True, stdout=DEVNULL, stderr=DEVNULL)
+    else:
+        run(f'sudo apt -y update', shell=True, stderr=STDOUT)
+        run(f'sudo apt -y upgrade', shell=True, stderr=STDOUT)
+    print(ansi.ansi('APT Updated').green())
+
     # Simulate install to get list of packages that will be installed.
     print('Obtaining list of APT packages...', end=' ')
     stdout = run(f'sudo apt-get -s -y install {" ".join(REQ_APT)}', shell=True, capture_output=True).stdout
