@@ -2,7 +2,7 @@
 
 from typing import Any
 import cv2
-from numpy import frombuffer, uint8
+from numpy import frombuffer, square, uint8
 from pytesseract import pytesseract, image_to_string
 from multiprocessing import Pool
 from psutil import cpu_count
@@ -225,6 +225,7 @@ def image_to_guess_list(bytes: bytes) -> 'list[str]':
 from typing import Any
 import cv2
 import numpy as np
+from collections import Counter
 
 class WordleImageProcessor:
 
@@ -243,15 +244,101 @@ class WordleImageProcessor:
     def _gen_masks(self) -> None:
         return
 
-fd = open('wordle.png', 'rb')
+fd = open('wordle-game-3.png', 'rb')
 image_bytes = fd.read()
 fd.close()
 
 wordle_image = WordleImageProcessor(image=image_bytes)
 cv2.imwrite('grayscale_mat.png', wordle_image.grayscale_mat)
-_, cells_mask = cv2.threshold(wordle_image.grayscale_mat, CELLS_MASK_THRESH, MAX_THRESH, cv2.THRESH_BINARY)
-cv2.imwrite('cells_mask.png', cells_mask)
-cell_contours, _ = cv2.findContours(cells_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-print(len(cell_contours), len(cell_contours[0]))
-drawn = cv2.drawContours(wordle_image.image, cell_contours, -1, (0,0,255))
+_, mask = cv2.threshold(wordle_image.grayscale_mat, CELLS_MASK_THRESH, MAX_THRESH, cv2.THRESH_BINARY)
+cv2.imwrite('cells_mask.png', mask)
+contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+print(f'Found {len(contours)} contours!')
+
+# how to remove contours that aren't part of the game?...
+# - look for square contours in a grid formation?
+#   - possibility: look through contours (x,y) to find grid
+def within_error_margin(length1: int, length2: int, error_margin: int):
+    # bottom half of error margin
+    if length1 < length2 - error_margin:
+        return False
+    
+    # top half of error margin
+    if length1 > length2 + error_margin:
+        return False
+
+    return True
+
+def filter_square_contours(contours):
+    square_contours = []
+    contour_coords = []
+    for contour in contours:
+        # disregard any contours that are not a quadrilateral
+        if len(contour) != 4:
+            continue
+        
+        # disregard any contour whose bounding box is not ~square
+        x, y, width, height = cv2.boundingRect(contour)
+        if not within_error_margin(width, height, 2):
+            continue
+
+        # the first set of coordinates correspond to the (x, y) position
+        # of the contour. we can use these to find a grid pattern.
+        contour_coords.append((x, y))
+        square_contours.append(np.squeeze(contour))
+
+    print(contour_coords)
+    print(f'Keeping {len(square_contours)}...')
+    return square_contours, contour_coords
+
+def find_board_contours(contour_coords):
+    # prev_coord = None
+    # streak = 1
+    # for coord in contour_coords:
+    #     if prev_coord == None:
+    #         prev_coord = coord
+    #         continue
+        
+    #     if within_error_margin(coord[1], prev_coord[1], 2):
+    #         streak += 1
+    #         if streak == 5:
+    #             print('row found!')
+    #             streak = 1
+    #     else:
+    #         streak = 1
+
+    #     prev_coord = coord
+    board_contour_coords = []
+    streak = []
+    for coord in contour_coords:
+
+        if len(streak) == 5:
+            print('potential game board row found!')
+            board_contour_coords += streak
+            streak = [coord]
+            continue
+
+        elif len(streak) == 0:
+            streak.append(coord)
+            continue
+
+        # if the current y-coord equals the previous y-coord,
+        # add coord to streak. if streak gets to length 5, we
+        # have found 5 contours on the same y-level in a row.
+        # this is likely to be a row from the game board, but we need
+        # to compare x-coords as well to be sure.
+        print(f'cur-y: {coord[1]}, prev-y: {streak[-1][1]}')
+        if coord[1] == streak[-1][1]:
+            streak.append(coord)
+            continue
+
+        streak = [coord]
+
+    print(contour_coords)
+    print(board_contour_coords)
+    quit()
+
+square_contours, contour_coords = filter_square_contours(contours)
+asdf = find_board_contours(contour_coords)
+drawn = cv2.drawContours(wordle_image.image, square_contours, -1, (0,0,255))
 cv2.imwrite('contours.png', drawn)
