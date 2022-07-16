@@ -1,8 +1,9 @@
 # Tesseract Manual: https://github.com/tesseract-ocr/tesseract/blob/main/doc/tesseract.1.asc
-
+"""
 from typing import Any
 import cv2
-from numpy import frombuffer, uint8
+from cv2 import contourArea
+from numpy import frombuffer, square, uint8
 from pytesseract import pytesseract, image_to_string
 from multiprocessing import Pool
 from psutil import cpu_count
@@ -220,16 +221,52 @@ def image_to_guess_list(bytes: bytes) -> 'list[str]':
     # Finally, we can construct a list of the words using Tesseract
     return _process_words(chars_mask, cells_mask, cells, cell_width)
 
-
+"""
 
 from typing import Any
 import cv2
 import numpy as np
+from collections import Counter
+from math import sqrt
+
+""" The following information was gathered directly from https://www.nytimes.com/games/wordle/index.html.
+FILE: wordle.de5cb286f0d33d9aff3bbedee6ec2ae37d46994f.js
+PURPOSE: Set the width and height of the board on window.resize
+    "var Ie=5"......at (1, 114566)
+    "var Le=6"......at (1, 114566)
+    "var So=350"....at (1, 157748)
+    "function e() {
+        var e, t=l.current, n=c.current;
+        t&&n&&(
+            e = Math.min(
+                Math.floor(t.clientHeight*(Le/Ie)),
+                So),
+            t = Math.floor(e/Le)*Ie,n.style.width="".concat(e,"px"),n.style.height="".concat(t,"px")
+        )
+    }"..............at (1, 157887)
+"""
+
+GRID_NUM_COLS       = 5
+GRID_NUM_ROWS       = 6
+GRID_GAP            = 5
+GRID_MAX_WIDTH      = 350
+GRID_MAX_HEIGHT     = 420
+GRID_MAX_CELL_SIZE  = 62
+GRID_PADDING        = 10
+
+BG          = 0xffffff  # :root/--color-tone-7
+BG_DARK     = 0x121213  # .dark/--color-tone-7
+GREEN       = 0x6aaa64  # :root/--green
+GREEN_DARK  = 0x538d4e  # :root/--darkendgreen
+YELLOW      = 0xc9b458  # :root/--yellow
+YELLOW_DARK = 0xb59f3b  # :root/--darkendyellow
+GRAY        = 0x787c7e  # :root/--color-tone-2
+GRAY_DARK   = 0x3a3a3c  # .dark/--color-tone-4
 
 class WordleImageProcessor:
-
-    def __init__(self, *, image: bytes) -> None:
+    def __init__(self, image: bytes, *, error_margin: int = 2) -> None:
         self.original_bytes: bytes = image
+        self.error_margin: int = error_margin
 
         self.image: np.ndarray = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
         self.grayscale_mat = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
@@ -240,18 +277,152 @@ class WordleImageProcessor:
         self.dark_theme: bool = None
         self.guess_list: list[str] = None
 
-    def _gen_masks(self) -> None:
-        return
+        self._ideal_contours: np.ndarray[np.uint16] = None
 
-fd = open('wordle.png', 'rb')
+    def within_error_margin(self, /, length1: int, length2: int, error_margin: int) -> bool:
+        # bottom half of error margin
+        if length1 < length2 - error_margin:
+            return False
+        
+        # top half of error margin
+        if length1 > length2 + error_margin:
+            return False
+
+        return True
+
+    # Returns all contours that are squares (EFFECTED BY ERROR_MARGIN)
+    def _square_contours(self, contours: 'list[np.ndarray]') -> 'list[np.ndarray]':
+        square_contours: list[np.ndarray] = []
+        for contour in contours:
+            # disregard any contours that are not a quadrilateral
+            if len(contour) != 4:
+                continue
+            
+            # disregard any contour whose bounding box is not ~square
+            _, _, w, h = cv2.boundingRect(contour)
+            if not self.within_error_margin(w, h, self.error_margin):
+                continue
+
+            # keep all ~square contours
+            square_contours.append(np.squeeze(contour))
+
+        # print(f'Keeping {len(square_contours)}...')
+        return square_contours
+
+    def find_board_contours(self) -> 'list[np.ndarray]':
+        # reduce the number of contours by limiting their shape to be strictly squares, within ERROR_MARGIN
+        _, mask = cv2.threshold(self.grayscale_mat, 50, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        square_contours = self._square_contours(contours)
+
+        #region add optional method By Grid:
+        # board_contour_coords = []
+        # streak = []
+        # for coord in contour_coords:
+
+        #     if len(streak) == 5:
+        #         print('potential game board row found!')
+        #         board_contour_coords += streak
+        #         streak = [coord]
+        #         continue
+
+        #     elif len(streak) == 0:
+        #         streak.append(coord)
+        #         continue
+
+        #     # if the current y-coord equals the previous y-coord,
+        #     # add coord to streak. if streak gets to length 5, we
+        #     # have found 5 contours on the same y-level in a row.
+        #     # this is likely to be a row from the game board, but we need
+        #     # to compare x-coords as well to be sure.
+        #     print(f'cur-y: {coord[1]}, prev-y: {streak[-1][1]}')
+        #     if coord[1] == streak[-1][1]:
+        #         streak.append(coord)
+        #         continue
+
+        #     streak = [coord]
+
+        # # print(contour_coords)
+        # print(board_contour_coords)
+        # # xs = Counter([x for (x, _) in board_contour_coords])
+        # ys = Counter([y for (_, y) in board_contour_coords])
+        # # print(xs)
+        # print(ys)
+        # quit()
+        #endregion
+
+        #region By Area
+        areas = [cv2.contourArea(c) for c in square_contours]
+
+        # tally the number of contours with unique areas
+        counter = Counter(areas)
+        print(counter)
+
+        # grab the largest area
+        max_area = counter.most_common()[0][0]
+        print(max_area)
+
+        # take the sqrt -> should be an integer since the majority of the cell contours are perfect squares
+        sr = sqrt(max_area)
+        print(sr)
+
+        # assuming we successfully obtained the largest width, determine the
+        # smallest acceptable area for a cell contour given ERROR_MARGIN. And...
+        thresh = (sr - self.error_margin)**2
+        print(thresh)
+
+        # ...take only contours whose area is larger
+        return [c for c in square_contours
+            if cv2.contourArea(c) > thresh]
+        #endregion
+
+    def ideal_contours(self):
+        # initialize image
+        image = np.zeros((GRID_MAX_HEIGHT, GRID_MAX_WIDTH, 3), np.uint8)
+        image[:,:] = (255,255,255)
+
+        # generate ideal contours
+        spacer_lines = 0
+        contours = np.zeros((GRID_NUM_COLS*GRID_NUM_ROWS,4,2), np.uint16)
+        for y in range(GRID_NUM_ROWS):
+            if not y%2:
+                spacer_lines += 1
+            for x in range(GRID_NUM_COLS):
+                contours[GRID_NUM_COLS*y+x] = [
+                    [
+                        GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP),
+                        GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines
+                    ],
+                    [
+                        GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP) + GRID_MAX_CELL_SIZE - 1,
+                        GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines
+                    ],
+                    [
+                        GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP) + GRID_MAX_CELL_SIZE - 1,
+                        GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines + GRID_MAX_CELL_SIZE - 1
+                    ],
+                    [
+                        GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP),
+                        GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines + GRID_MAX_CELL_SIZE - 1
+                    ]]
+        # cv2.drawContours(image, contours.astype(int), -1, (0,0,255))
+        # cv2.line(image, (0, 0), (GRID_MAX_WIDTH-1, GRID_MAX_HEIGHT-1), (0,255,0))
+        # cv2.line(image, (GRID_MAX_WIDTH-1,0), (0, GRID_MAX_HEIGHT-1), (0,255,0))
+        # cv2.imwrite('ideal-contours.png', image)
+        return contours
+
+
+
+# open submission image as bytes
+fd = open('wordle-game-3.png', 'rb')
 image_bytes = fd.read()
 fd.close()
 
-wordle_image = WordleImageProcessor(image=image_bytes)
-cv2.imwrite('grayscale_mat.png', wordle_image.grayscale_mat)
-_, cells_mask = cv2.threshold(wordle_image.grayscale_mat, CELLS_MASK_THRESH, MAX_THRESH, cv2.THRESH_BINARY)
-cv2.imwrite('cells_mask.png', cells_mask)
-cell_contours, _ = cv2.findContours(cells_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-print(len(cell_contours), len(cell_contours[0]))
-drawn = cv2.drawContours(wordle_image.image, cell_contours, -1, (0,0,255))
-cv2.imwrite('contours.png', drawn)
+# generate the contours
+MY_IMG = WordleImageProcessor(image=image_bytes)
+
+# get EXCLUSIVELY board contours
+cell_contours = MY_IMG.find_board_contours()
+# drawn = cv2.drawContours(MY_IMG.image, cell_contours, -1, (0,0,255))
+# cv2.imwrite('contours.png', drawn)
+MY_IMG.ideal_contours()
