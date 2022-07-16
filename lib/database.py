@@ -14,18 +14,27 @@ class DoubleSubmit(Exception):
 
 class BotDatabase:
     '''
-    Database class. Contains two member variables database and users. 
-    database is a sqlite3 database connection where data is stored
-    users is a python set containing the usernames of users that are in the database 
+    Database class. Contains two member variables _database and _users. 
+    _database is a sqlite3 database connection where data is stored.
+    _users is a python dictionary containing the usernames of users that are in the database,
+    each user maps to the date of their last submission 
     '''
     def __init__(self, db_path:str):
         '''
         BotDatabase(path:str) -> BotDatabase object with sqlite3 database stored at specified path
         For example: BotDatabase('/path/to/database')
         '''
+        
+        # initialize sqlite database at specified path
         self._database = sql.connect(db_path)
+
+        # initialize dictionary to contain users and their last submission date
         self._users = dict()
+
+        # initialize cursor
         __cur = self._database.cursor()
+
+        # execute sql script to initialize the sqlite database
         __cur.executescript('''
 
         CREATE TABLE User_Data (
@@ -70,16 +79,21 @@ class BotDatabase:
                 0 
             );''')
         
+        # close the cursor
         __cur.close()
+
+        # commit the changes to the database
         self._database.commit()
 
     def get_stats(self, username:str):
         '''
         Method returns the stats on the specified user
+        Stats returned: 
         '''
         __cur = self._database.cursor()
         __raw = __cur.execute(f'''SELECT * FROM User_Data WHERE username = '{username}';''').fetchall()
         print(__raw)
+        __cur.close()
 
     def _get_update_values(self, solved:int, __last_solve:int, date:int):
         # increase solves if user solved the wordle; otherwise solves stays the same
@@ -151,7 +165,7 @@ class BotDatabase:
         __attempts_insert = 1
         
         # solves and streak set to 1 if solved; otherwise 0
-        __solves_insert, __streak_insert = 1 if solved else 0
+        __solves_insert = __streak_insert = 1 if solved else 0
 
         # last_solve will set to todays date if solved; otherwise set to 0
         __date_insert = date if solved else 0
@@ -224,4 +238,6 @@ if __name__ == '__main__':
     remove(DB_PATH)
     db = BotDatabase(DB_PATH)
 
-    db._update_user('mario', True, 1, 1, 1, 20220717)
+    db.submit_data('mario', True, 1, 1, 1)
+
+    db.get_stats('mario')
