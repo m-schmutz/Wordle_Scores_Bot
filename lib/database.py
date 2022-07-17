@@ -1,8 +1,6 @@
-#!/bin/python3
 import sqlite3 as sql
 from datetime import datetime
 from os import path, remove
-import time
 
 DB_PATH = './bot_database/test.db'
 
@@ -11,11 +9,13 @@ LTRS_IN_GUESS = 5
 def date_to_int():
     return int(datetime.now().date().isoformat().replace('-', ''))
 
-class Stats:
+class UserStats:
     '''
     Object to contain user stats returned from the database
     '''
-    def __init__(self, attempts:int, solves:int, guesses:int, greens:int, yellows:int, curr_streak:int, max_streak:int):
+    def __init__(self, __raw:tuple):
+        _, attempts, solves, guesses, greens, yellows, curr_streak, max_streak, last_solve = __raw
+
         self.attempts = attempts
         self.solves = solves
         self.guesses = guesses
@@ -44,7 +44,36 @@ class Stats:
         yellow rate = {self.yellow_rate}
         '''
         
+class GroupStats:
+    '''
+    Object to contain group stats returned from the database
+    '''
+    def __init__(self, __raw:tuple):
+        attempts, solves, guesses, greens, yellows = __raw
 
+        self.attempts = attempts
+        self.solves = solves 
+        self.guesses = guesses
+        self.greens = greens
+        self.yellows = yellows
+
+        __total_letters = guesses * LTRS_IN_GUESS
+        self.total_letters = __total_letters
+
+        self.green_rate = (greens / __total_letters) * 100
+        self.yellow_rate = (yellows / __total_letters) * 100
+
+    def __str__(self) -> str:
+        return f'''
+        group attempts = {self.attempts}
+        group solves = {self.solves}
+        group guesses = {self.guesses}
+        group greens = {self.greens}
+        group yellows = {self.yellows}
+        group total letters = {self.total_letters}
+        group green rate = {self.green_rate}
+        group yellow rate = {self.yellow_rate}
+        '''
 
 
 class DoubleSubmit(Exception):
@@ -129,25 +158,51 @@ class BotDatabase:
         # commit the changes to the database
         self._database.commit()
 
-    def get_stats(self, username:str):
+    def get_user_stats(self, username:str):
         '''
         Method returns the stats on the specified user
         Stats returned: 
         '''
+        # initialize cursor
         __cur = self._database.cursor()
+
+        # get user data from the database
         __raw = __cur.execute(f'''SELECT * FROM User_Data WHERE username = '{username}';''').fetchone()
+        
+        # close the cursor
         __cur.close()
 
-        _, attempts, solves, guesses, greens, yellows, curr_streak, max_streak, _ = __raw
-        user_stats = Stats(attempts, solves, guesses, greens, yellows, curr_streak, max_streak)
+        # initialize UserStats object with values from database
+        user_stats = UserStats(__raw)
+
+        # return UserStats object
         return user_stats
+
+    def get_group_stats(self):
+
+        # initialize cursor
+        __cur = self._database.cursor()
+
+        # get group data from the database
+        __raw = __cur.execute('SELECT * FROM Group_Data').fetchone()
+        
+        # close cursor
+        __cur.close()
+
+        # initialize GroupStats object with values from database
+        group_stats = GroupStats(__raw)
+
+        # return the GroupData object
+        return group_stats
+
+
 
     def _get_update_values(self, solved:int, __last_solve:int, date:int):
         # increase solves if user solved the wordle; otherwise solves stays the same
         __solves_update = 'solves + 1' if solved else 'solves'
 
         # increment streak if user has solved consecutively; otherwise streak will not be incremented
-        __continue_streak = True if (date - __last_solve) == 1 else False
+        __continue_streak = (date - __last_solve) == 1 
 
         # last solve is set to current date if wordle solved; otherwise last solve stays the same
         __last_solve_update = date if solved else __last_solve
@@ -173,11 +228,11 @@ class BotDatabase:
         __cur = self._database.cursor()
 
         # get the last solve date for this user
-        __last_solve = __cur.execute(f'''SELECT last_solve FROM User_Data WHERE username = '{username}';''').fetchone()[0]
+        __last_solve, = __cur.execute(f"SELECT last_solve FROM User_Data WHERE username = '{username}';").fetchone()
 
         # get the update values for the database
         __solves_update, __streak_update, __last_solve_update = self._get_update_values(solved, __last_solve, date)
-
+        
         # execute sql script to update data in database for this user
         __cur.executescript(f'''
             UPDATE User_Data SET attempts = attempts + 1 WHERE username = '{username}';
@@ -203,11 +258,6 @@ class BotDatabase:
 
     def _add_user(self, username:str, solved:bool, guesses:int, greens:int, yellows:int, date:int):
         
-        __cur = self._database.cursor()
-
-        # add user to the _users dictionary
-        self._users[username] = date
-
         # attempts set to 1
         __attempts_insert = 1
         
@@ -216,6 +266,9 @@ class BotDatabase:
 
         # last_solve will set to todays date if solved; otherwise set to 0
         __date_insert = date if solved else 0
+       
+        # initialize cursor
+        __cur = self._database.cursor()
 
         # execute sql script to add new user to the database
         __cur.executescript(f'''
@@ -239,6 +292,12 @@ class BotDatabase:
                     {__streak_insert}, 
                     {__streak_insert}, 
                     {__date_insert});
+
+            UPDATE Group_Data SET attempts = attempts + 1;
+            UPDATE Group_Data SET solves = solves + {__solves_insert};
+            UPDATE Group_Data SET guesses = guesses + {guesses};
+            UPDATE Group_Data SET greens = greens + {greens};
+            UPDATE Group_Data SET yellows = yellows + {yellows};
         ''')
 
         # close the cursor
@@ -269,25 +328,10 @@ class BotDatabase:
             # if we get here, this is a new submission for today. Update database
             self._update_user(username, solved, guesses, greens, yellows, date)
 
-            # update the last submission date
-            self._users[username] = date
-
         # if user is not in _users, add new user and update database
         else:
-            # add user to the _users registry
-            self._users[username] = date
-            
             # add user to the database
             self._add_user(username, solved, guesses, greens, yellows, date)
-
             
-if __name__ == '__main__':
-    db = BotDatabase(DB_PATH)
-
-    USER = 'mario'
-    print(db.get_stats(USER))
-
-    # db.submit_data(USER, True, 6, 9, 2)
-
-
-    # db.submit_data(USER, True, 6, 9, 2)
+        # add user to the _users registry
+        self._users[username] = date
