@@ -6,8 +6,46 @@ import time
 
 DB_PATH = './bot_database/test.db'
 
+LTRS_IN_GUESS = 5
+
 def date_to_int():
     return int(datetime.now().date().isoformat().replace('-', ''))
+
+class Stats:
+    '''
+    Object to contain user stats returned from the database
+    '''
+    def __init__(self, attempts:int, solves:int, guesses:int, greens:int, yellows:int, curr_streak:int, max_streak:int):
+        self.attempts = attempts
+        self.solves = solves
+        self.guesses = guesses
+        self.greens = greens
+        self.yellows = yellows
+        self.curr_streak = curr_streak
+        self.max_streak = max_streak
+        
+        __total_letters = guesses * LTRS_IN_GUESS
+        self.total_letters = __total_letters
+
+        self.green_rate = (greens / __total_letters) * 100
+        self.yellow_rate = (yellows / __total_letters) * 100
+
+    def __str__(self) -> str:
+        return f'''
+        attempts = {self.attempts}
+        solves = {self.solves}
+        guesses = {self.guesses}
+        greens = {self.greens}
+        yellows = {self.yellows}
+        current streak = {self.curr_streak}
+        max streak = {self.max_streak}
+        total letters = {self.total_letters}
+        green rate = {self.green_rate}
+        yellow rate = {self.yellow_rate}
+        '''
+        
+
+
 
 class DoubleSubmit(Exception):
     '''Exception raised if user attempts to submit twice on the same day'''
@@ -23,64 +61,70 @@ class BotDatabase:
         '''
         BotDatabase(path:str) -> BotDatabase object with sqlite3 database stored at specified path
         For example: BotDatabase('/path/to/database')
+        If database file already exists, it will be used as the database
         '''
-        
+        # determine if the file at db_path already exists
+        exists = path.exists(db_path)
+
         # initialize sqlite database at specified path
         self._database = sql.connect(db_path)
 
         # initialize dictionary to contain users and their last submission date
         self._users = dict()
 
-        # initialize cursor
-        __cur = self._database.cursor()
+        # if the database did not previously exist, initialize a new one
+        if not exists:
 
-        # execute sql script to initialize the sqlite database
-        __cur.executescript('''
+            # initialize cursor
+            __cur = self._database.cursor()
 
-        CREATE TABLE User_Data (
-            username varchar(32), 
-            attempts int, 
-            solves int, 
-            guesses int, 
-            greens int, 
-            yellows int, 
-            curr_streak int, 
-            max_streak int, 
-            last_solve int, 
-            PRIMARY KEY (username)
-            ); 
+            # execute sql script to initialize the sqlite database
+            __cur.executescript('''
 
-        CREATE TABLE Group_Data (
-            attempts int, 
-            solves int, 
-            guesses int,
-            greens int, 
-            yellows int 
-            ); 
+            CREATE TABLE User_Data (
+                username varchar(32), 
+                attempts int, 
+                solves int, 
+                guesses int, 
+                greens int, 
+                yellows int, 
+                curr_streak int, 
+                max_streak int, 
+                last_solve int, 
+                PRIMARY KEY (username)
+                ); 
 
-        CREATE TRIGGER Update_Max AFTER UPDATE ON User_Data
-            BEGIN
-            UPDATE User_Data SET max_streak = curr_streak 
-            WHERE username = NEW.username AND curr_streak > max_streak;
-            END;
+            CREATE TABLE Group_Data (
+                attempts int, 
+                solves int, 
+                guesses int,
+                greens int, 
+                yellows int 
+                ); 
+
+            CREATE TRIGGER Update_Max AFTER UPDATE ON User_Data
+                BEGIN
+                UPDATE User_Data SET max_streak = curr_streak 
+                WHERE username = NEW.username AND curr_streak > max_streak;
+                END;
+                
+            INSERT INTO Group_Data (
+                attempts, 
+                solves, 
+                guesses, 
+                greens, 
+                yellows
+                )
+                VALUES (
+                    0, 
+                    0, 
+                    0, 
+                    0, 
+                    0 
+                );''')
             
-        INSERT INTO Group_Data (
-            attempts, 
-            solves, 
-            guesses, 
-            greens, 
-            yellows
-            )
-            VALUES (
-                0, 
-                0, 
-                0, 
-                0, 
-                0 
-            );''')
-        
-        # close the cursor
-        __cur.close()
+            # close the cursor
+            __cur.close()
 
         # commit the changes to the database
         self._database.commit()
@@ -91,9 +135,12 @@ class BotDatabase:
         Stats returned: 
         '''
         __cur = self._database.cursor()
-        __raw = __cur.execute(f'''SELECT * FROM User_Data WHERE username = '{username}';''').fetchall()
-        print(__raw)
+        __raw = __cur.execute(f'''SELECT * FROM User_Data WHERE username = '{username}';''').fetchone()
         __cur.close()
+
+        _, attempts, solves, guesses, greens, yellows, curr_streak, max_streak, _ = __raw
+        user_stats = Stats(attempts, solves, guesses, greens, yellows, curr_streak, max_streak)
+        return user_stats
 
     def _get_update_values(self, solved:int, __last_solve:int, date:int):
         # increase solves if user solved the wordle; otherwise solves stays the same
@@ -235,9 +282,12 @@ class BotDatabase:
 
             
 if __name__ == '__main__':
-    remove(DB_PATH)
     db = BotDatabase(DB_PATH)
 
-    db.submit_data('mario', True, 1, 1, 1)
+    USER = 'mario'
+    print(db.get_stats(USER))
 
-    db.get_stats('mario')
+    # db.submit_data(USER, True, 6, 9, 2)
+
+
+    # db.submit_data(USER, True, 6, 9, 2)
