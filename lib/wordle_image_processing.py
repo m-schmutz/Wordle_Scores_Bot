@@ -265,21 +265,23 @@ GRAY_DARK   = 0x3a3a3c  # .dark/--color-tone-4
 
 class WordleImageProcessor:
     def __init__(self, image: bytes, *, error_margin: int = 2) -> None:
-        self.original_bytes: bytes = image
-        self.error_margin: int = error_margin
+        self._ideal_cell_contours = None
+        # self._original_bytes: bytes = image
 
         self.image: np.ndarray = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+        self.error_margin: int = error_margin
         self.grayscale_mat = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
-        self.character_contours: Any = None
-        self.character_cell_contours: Any = None
-        self.characters_mask: Any = None
-        self.character_cells_mask: Any = None
         self.dark_theme: bool = None
         self.guess_list: list[str] = None
 
-        self._ideal_contours: np.ndarray[np.uint16] = None
+        self.characters_mask: Any = None
+        self.character_contours: Any = None
+        self.character_cells_mask: Any = None
+        self.character_cell_contours: Any = None
 
-    def within_error_margin(self, /, length1: int, length2: int, error_margin: int) -> bool:
+    # if length2 in [length1-error_margin, length1+error_margin] -> True
+    # otherwise -> False
+    def _within_error_margin(self, /, length1: int, length2: int, error_margin: int) -> bool:
         # bottom half of error margin
         if length1 < length2 - error_margin:
             return False
@@ -300,7 +302,7 @@ class WordleImageProcessor:
             
             # disregard any contour whose bounding box is not ~square
             _, _, w, h = cv2.boundingRect(contour)
-            if not self.within_error_margin(w, h, self.error_margin):
+            if not self._within_error_margin(w, h, self.error_margin):
                 continue
 
             # keep all ~square contours
@@ -309,11 +311,12 @@ class WordleImageProcessor:
         # print(f'Keeping {len(square_contours)}...')
         return square_contours
 
-    def find_board_contours(self) -> 'list[np.ndarray]':
-        # reduce the number of contours by limiting their shape to be strictly squares, within ERROR_MARGIN
-        _, mask = cv2.threshold(self.grayscale_mat, 50, 255, cv2.THRESH_BINARY)
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        square_contours = self._square_contours(contours)
+    # Tries to find the character cell contours and returns them in a list.
+    def find_cell_contours(self) -> 'list[np.ndarray]':
+        # # reduce the number of contours by limiting their shape to be strictly squares, within ERROR_MARGIN
+        # _, mask = cv2.threshold(self.grayscale_mat, 50, 255, cv2.THRESH_BINARY)
+        # contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # square_contours = self._square_contours(contours)
 
         #region add optional method By Grid:
         # board_contour_coords = []
@@ -352,77 +355,91 @@ class WordleImageProcessor:
         #endregion
 
         #region By Area
-        areas = [cv2.contourArea(c) for c in square_contours]
+        # areas = [cv2.contourArea(c) for c in square_contours]
 
-        # tally the number of contours with unique areas
-        counter = Counter(areas)
-        print(counter)
+        # # tally the number of contours with unique areas
+        # counter = Counter(areas)
+        # print(counter)
 
-        # grab the largest area
-        max_area = counter.most_common()[0][0]
-        print(max_area)
+        # # grab the largest area
+        # max_area = counter.most_common()[0][0]
+        # print(max_area)
 
-        # take the sqrt -> should be an integer since the majority of the cell contours are perfect squares
-        sr = sqrt(max_area)
-        print(sr)
+        # # take the sqrt -> should be an integer since the majority of the cell contours are perfect squares
+        # sr = sqrt(max_area)
+        # print(sr)
 
-        # assuming we successfully obtained the largest width, determine the
-        # smallest acceptable area for a cell contour given ERROR_MARGIN. And...
-        thresh = (sr - self.error_margin)**2
-        print(thresh)
+        # # assuming we successfully obtained the largest width, determine the
+        # # smallest acceptable area for a cell contour given ERROR_MARGIN. And...
+        # thresh = (sr - self.error_margin)**2
+        # print(thresh)
 
-        # ...take only contours whose area is larger
-        return [c for c in square_contours
-            if cv2.contourArea(c) > thresh]
+        # # ...take only contours whose area is larger
+        # return [c for c in square_contours
+        #     if cv2.contourArea(c) > thresh]
         #endregion
 
-    def ideal_contours(self):
-        # initialize image
-        image = np.zeros((GRID_MAX_HEIGHT, GRID_MAX_WIDTH, 3), np.uint8)
-        image[:,:] = (255,255,255)
+        # # BG_DARK (0x121213), when converted to single-channel grayscale equals 0x12.
+        # # Since a 3-channel has a range of 2**24 and a single-channel has a range
+        # # of 2**8, we can simply bitwise shift right by 16 to retrieve the grayscale.
+        # cv2.imwrite('grayscale_mat.png', self.grayscale_mat)
+        # _, mask = cv2.threshold(self.grayscale_mat, BG_DARK>>16, 255, cv2.THRESH_BINARY)
+        # cv2.imwrite('mask.png', mask)
+        # contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        # # contours is a tuple of ndarrays
+        # img = cv2.drawContours(self.image, contours, -1, (0,0,255))
+        # cv2.imwrite('contours.png', img)
+        return
 
-        # generate ideal contours
-        spacer_lines = 0
-        contours = np.zeros((GRID_NUM_COLS*GRID_NUM_ROWS,4,2), np.uint16)
-        for y in range(GRID_NUM_ROWS):
-            if not y%2:
-                spacer_lines += 1
-            for x in range(GRID_NUM_COLS):
-                contours[GRID_NUM_COLS*y+x] = [
-                    [
-                        GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP),
-                        GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines
-                    ],
-                    [
-                        GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP) + GRID_MAX_CELL_SIZE - 1,
-                        GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines
-                    ],
-                    [
-                        GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP) + GRID_MAX_CELL_SIZE - 1,
-                        GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines + GRID_MAX_CELL_SIZE - 1
-                    ],
-                    [
-                        GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP),
-                        GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines + GRID_MAX_CELL_SIZE - 1
-                    ]]
-        # cv2.drawContours(image, contours.astype(int), -1, (0,0,255))
-        # cv2.line(image, (0, 0), (GRID_MAX_WIDTH-1, GRID_MAX_HEIGHT-1), (0,255,0))
-        # cv2.line(image, (GRID_MAX_WIDTH-1,0), (0, GRID_MAX_HEIGHT-1), (0,255,0))
-        # cv2.imwrite('ideal-contours.png', image)
-        return contours
+    # Returns a numpy array of the ideal character cell contours.
+    def ideal_cell_contours(self) -> np.ndarray:
+        # Generate the contours if we haven't already.
+        if self._ideal_cell_contours == None:
+            # generate ideal contours
+            spacer_lines = 0
+            self._ideal_cell_contours = np.zeros((GRID_NUM_COLS*GRID_NUM_ROWS,4,2), np.uint16)
+            for y in range(GRID_NUM_ROWS):
+                # The official webpage has an additional row of pixels between every two
+                # rows as a byproduct of CSS centering. This is how we mimic it:
+                if not y%2:
+                    spacer_lines += 1
+
+                for x in range(GRID_NUM_COLS):
+                    self._ideal_cell_contours[GRID_NUM_COLS*y+x] = [
+                        [
+                            GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP),
+                            GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines
+                        ],
+                        [
+                            GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP) + GRID_MAX_CELL_SIZE - 1,
+                            GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines
+                        ],
+                        [
+                            GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP) + GRID_MAX_CELL_SIZE - 1,
+                            GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines + GRID_MAX_CELL_SIZE - 1
+                        ],
+                        [
+                            GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP),
+                            GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines + GRID_MAX_CELL_SIZE - 1
+                        ]]
+        return self._ideal_cell_contours
 
 
+# fd = open('wordle-game-3.png', 'rb')
+# image_bytes = fd.read()
+# fd.close()
+# image_processor = WordleImageProcessor(image=image_bytes)
 
-# open submission image as bytes
-fd = open('wordle-game-3.png', 'rb')
-image_bytes = fd.read()
-fd.close()
+image = cv2.imread('lib/character-masks/abcde.png')
+gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+_, cell_mask = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY)
+_, mask = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
+cv2.imwrite('cell_mask.png', cell_mask)
+cv2.imwrite('mask.png', mask)
+contours, _ = cv2.findContours(cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+new_image = cv2.drawContours(image, contours, -1, (0,0,255))
+cv2.imwrite('contours.png', new_image)
 
-# generate the contours
-MY_IMG = WordleImageProcessor(image=image_bytes)
-
-# get EXCLUSIVELY board contours
-cell_contours = MY_IMG.find_board_contours()
-# drawn = cv2.drawContours(MY_IMG.image, cell_contours, -1, (0,0,255))
-# cv2.imwrite('contours.png', drawn)
-MY_IMG.ideal_contours()
+for c in contours:
+    x, y, w, h = cv2.boundingRect(c)
+    print(w, h)
