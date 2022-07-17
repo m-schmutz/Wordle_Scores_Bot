@@ -25,6 +25,8 @@ class UserStats:
         __total_letters = guesses * LTRS_IN_GUESS
         self.total_letters = __total_letters
 
+        self.avg_guesses = guesses / attempts
+
         self.green_rate = (greens / __total_letters) * 100
         self.yellow_rate = (yellows / __total_letters) * 100
 
@@ -33,6 +35,7 @@ class UserStats:
         attempts = {self.attempts}
         solves = {self.solves}
         guesses = {self.guesses}
+        average guesses = {self.avg_guesses}
         greens = {self.greens}
         yellows = {self.yellows}
         current streak = {self.curr_streak}
@@ -58,6 +61,8 @@ class GroupStats:
         __total_letters = guesses * LTRS_IN_GUESS
         self.total_letters = __total_letters
 
+        self.avg_guesses = guesses / attempts
+
         self.green_rate = (greens / __total_letters) * 100
         self.yellow_rate = (yellows / __total_letters) * 100
 
@@ -66,6 +71,7 @@ class GroupStats:
         group attempts = {self.attempts}
         group solves = {self.solves}
         group guesses = {self.guesses}
+        group average guesses = {self.avg_guesses}
         group greens = {self.greens}
         group yellows = {self.yellows}
         group total letters = {self.total_letters}
