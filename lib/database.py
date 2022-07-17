@@ -2,8 +2,6 @@ import sqlite3 as sql
 from datetime import datetime
 from os import path, remove
 
-DB_PATH = './bot_database/test.db'
-
 LTRS_IN_GUESS = 5
 
 def date_to_int():
