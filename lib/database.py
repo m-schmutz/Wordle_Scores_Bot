@@ -79,7 +79,6 @@ class GroupStats:
         group yellow rate = {self.yellow_rate}
         '''
 
-
 class DoubleSubmit(Exception):
     '''Exception raised if user attempts to submit twice on the same day'''
 
@@ -198,8 +197,6 @@ class BotDatabase:
 
         # return the GroupData object
         return group_stats
-
-
 
     def _get_update_values(self, solved:int, __last_solve:int, date:int):
         # increase solves if user solved the wordle; otherwise solves stays the same
