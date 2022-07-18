@@ -1,5 +1,5 @@
-# Tesseract Manual: https://github.com/tesseract-ocr/tesseract/blob/main/doc/tesseract.1.asc
 """
+# Tesseract Manual: https://github.com/tesseract-ocr/tesseract/blob/main/doc/tesseract.1.asc
 from typing import Any
 import cv2
 from cv2 import contourArea
@@ -226,8 +226,9 @@ def image_to_guess_list(bytes: bytes) -> 'list[str]':
 from typing import Any
 import cv2
 import numpy as np
-from collections import Counter
-from math import sqrt
+import time
+# from collections import Counter
+# from math import sqrt
 
 """ The following information was gathered directly from https://www.nytimes.com/games/wordle/index.html.
 FILE: wordle.de5cb286f0d33d9aff3bbedee6ec2ae37d46994f.js
@@ -269,19 +270,10 @@ BORDER_DARK = 0x3a3a3c
 
 class WordleImageProcessor:
     def __init__(self, image: bytes, *, error_margin: int = 2) -> None:
-        self._ideal_cell_contours = None
-        # self._original_bytes: bytes = image
-
-        self.image: np.ndarray = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
-        self.error_margin: int = error_margin
-        self.grayscale_mat = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
-        self.dark_theme: bool = None
-        self.guess_list: list[str] = None
-
-        self.chars_mask: Any = None
-        self.char_contours: Any = None
-        self.cells_mask: Any = None
-        self.cell_contours: Any = None
+        self._alphabet = 'abcdefghijklmnopqrstuvwxyz'
+        self.image: np.ndarray  = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+        self.error_margin: int  = error_margin
+        self._generate_data()
 
     # if length2 in [length1-error_margin, length1+error_margin] -> True
     # otherwise -> False
@@ -315,8 +307,9 @@ class WordleImageProcessor:
         # print(f'Keeping {len(square_contours)}...')
         return square_contours
 
-    # Tries to find the character cell contours and returns them in a list.
-    def find_cell_contours(self) -> 'list[np.ndarray]':
+    #region unused functions
+        # Tries to find the character cell contours and returns them in a list.
+    # def find_cell_contours(self) -> 'list[np.ndarray]':
         # # reduce the number of contours by limiting their shape to be strictly squares, within ERROR_MARGIN
         # _, mask = cv2.threshold(self.grayscale_mat, 50, 255, cv2.THRESH_BINARY)
         # contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -383,137 +376,187 @@ class WordleImageProcessor:
         #     if cv2.contourArea(c) > thresh]
         #endregion
 
-        # # BG_DARK (0x121213), when converted to single-channel grayscale equals 0x12.
-        # # Since a 3-channel has a range of 2**24 and a single-channel has a range
-        # # of 2**8, we can simply bitwise shift right by 16 to retrieve the grayscale.
-        # cv2.imwrite('grayscale_mat.png', self.grayscale_mat)
-        # _, mask = cv2.threshold(self.grayscale_mat, BG_DARK>>16, 255, cv2.THRESH_BINARY)
-        # cv2.imwrite('mask.png', mask)
-        # contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        # # contours is a tuple of ndarrays
-        # img = cv2.drawContours(self.image, contours, -1, (0,0,255))
-        # cv2.imwrite('contours.png', img)
-        return
+    # # Returns a numpy array of the ideal character cell contours.
+    # def ideal_cell_contours(self) -> np.ndarray:
+    #     # generate ideal contours
+    #     spacer_lines = 0
+    #     self._ideal_cell_contours = np.zeros((GRID_NUM_COLS*GRID_NUM_ROWS,4,2), np.uint16)
+    #     for y in range(GRID_NUM_ROWS):
+    #         # The official webpage has an additional row of pixels between every two
+    #         # rows as a byproduct of CSS centering. This is how we mimic it:
+    #         if not y%2:
+    #             spacer_lines += 1
 
-    # Returns a numpy array of the ideal character cell contours.
-    def ideal_cell_contours(self) -> np.ndarray:
-        # Generate the contours if we haven't already.
-        if self._ideal_cell_contours == None:
-            # generate ideal contours
-            spacer_lines = 0
-            self._ideal_cell_contours = np.zeros((GRID_NUM_COLS*GRID_NUM_ROWS,4,2), np.uint16)
-            for y in range(GRID_NUM_ROWS):
-                # The official webpage has an additional row of pixels between every two
-                # rows as a byproduct of CSS centering. This is how we mimic it:
-                if not y%2:
-                    spacer_lines += 1
+    #         for x in range(GRID_NUM_COLS):
+    #             self._ideal_cell_contours[GRID_NUM_COLS*y+x] = [
+    #                 [
+    #                     GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP),
+    #                     GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines
+    #                 ],
+    #                 [
+    #                     GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP) + GRID_MAX_CELL_SIZE - 1,
+    #                     GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines
+    #                 ],
+    #                 [
+    #                     GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP) + GRID_MAX_CELL_SIZE - 1,
+    #                     GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines + GRID_MAX_CELL_SIZE - 1
+    #                 ],
+    #                 [
+    #                     GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP),
+    #                     GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines + GRID_MAX_CELL_SIZE - 1
+    #                 ]]
+    #     return self._ideal_cell_contours
 
-                for x in range(GRID_NUM_COLS):
-                    self._ideal_cell_contours[GRID_NUM_COLS*y+x] = [
-                        [
-                            GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP),
-                            GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines
-                        ],
-                        [
-                            GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP) + GRID_MAX_CELL_SIZE - 1,
-                            GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines
-                        ],
-                        [
-                            GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP) + GRID_MAX_CELL_SIZE - 1,
-                            GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines + GRID_MAX_CELL_SIZE - 1
-                        ],
-                        [
-                            GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP),
-                            GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines + GRID_MAX_CELL_SIZE - 1
-                        ]]
-        return self._ideal_cell_contours
 
-    def asdf(self):
-    # generate masks
-        _, game_cell_mask = cv2.threshold(self.grayscale_mat, BG_DARK>>16, 255, cv2.THRESH_BINARY)
-        cv2.imwrite('mask.png', game_cell_mask)
-        _, game_char_mask = cv2.threshold(self.grayscale_mat, 200, 255, cv2.THRESH_BINARY)
-        cv2.imwrite('charmask.png', game_char_mask)
+    # def intersectConvex(self):
+    # # generate masks
+    #     _, game_cell_mask = cv2.threshold(self.grayscale_mat, BG_DARK>>16, 255, cv2.THRESH_BINARY)
+    #     cv2.imwrite('cell_mask.png', game_cell_mask)
+    #     _, game_char_mask = cv2.threshold(self.grayscale_mat, 200, 255, cv2.THRESH_BINARY)
+    #     cv2.imwrite('char_mask.png', game_char_mask)
         
-    # find contours
-        self.cell_contours, _ = cv2.findContours(game_cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        cv2.imwrite('contours.png', cv2.drawContours(self.image.copy(), self.cell_contours, -1, (0,0,255)))
-        self.char_contours, _ = cv2.findContours(game_char_mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
-        cv2.imwrite('char_contours.png', cv2.drawContours(self.image.copy(), self.char_contours, -1, (0,0,255)))
+    # # find contours
+    #     self.cell_contours, _ = cv2.findContours(game_cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    #     cv2.imwrite('cell_contours.png', cv2.drawContours(self.image.copy(), self.cell_contours, -1, (0,0,255)))
+    #     self.char_contours, _ = cv2.findContours(game_char_mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+    #     cv2.imwrite('char_contours.png', cv2.drawContours(self.image.copy(), self.char_contours, -1, (0,0,255)))
 
-    # create line contours
-        cell_contour = np.squeeze(self.cell_contours[0])
-        char_contour = np.squeeze(self.char_contours[0])
-        char_contour_convex = cv2.convexHull(char_contour)
-        x, y, w, h = cv2.boundingRect(char_contour_convex)
+    # # create line contours
+    #     cell_contour = np.squeeze(self.cell_contours[0])
+    #     char_contour = np.squeeze(self.char_contours[0])
+    #     char_contour_convex = cv2.convexHull(char_contour)
+    #     x, y, w, h = cv2.boundingRect(char_contour_convex)
 
-        hoff = int(h*0.5)
-        hboxline = np.array([
-            [x,     y+hoff-1],
-            [x+w,   y+hoff-1],
-            [x+w,   y+hoff+1],
-            [x,     y+hoff+1]])
-        _, hx = cv2.intersectConvexConvex(char_contour, hboxline)
-        hx = np.squeeze(hx.astype(int))
+    #     hoff = int(h*0.5)
+    #     hboxline = np.array([
+    #         [x,     y+hoff-1],
+    #         [x+w,   y+hoff-1],
+    #         [x+w,   y+hoff+1],
+    #         [x,     y+hoff+1]])
+    #     _, hx = cv2.intersectConvexConvex(char_contour, hboxline)
+    #     hx = np.squeeze(hx.astype(int))
 
-        voff = int(w*0.5)
-        vboxline = np.array([
-            [x+voff-1,    y],
-            [x+voff-1,    y+h],
-            [x+voff+1,    y+h],
-            [x+voff+1,    y]])
-        _, vx = cv2.intersectConvexConvex(char_contour_convex, vboxline)
-        vx = np.squeeze(vx.astype(int))
+    #     voff = int(w*0.5)
+    #     vboxline = np.array([
+    #         [x+voff-1,    y],
+    #         [x+voff-1,    y+h],
+    #         [x+voff+1,    y+h],
+    #         [x+voff+1,    y]])
+    #     _, vx = cv2.intersectConvexConvex(char_contour_convex, vboxline)
+    #     vx = np.squeeze(vx.astype(int))
         
-        cv2.drawContours(self.image, [char_contour_convex], -1, (255,0,0))
-        cv2.drawContours(self.image, [cell_contour, hx, vx], -1, (0,0,255))
-        cv2.imwrite('intersections.png', self.image)
+    #     cv2.drawContours(self.image, [char_contour_convex], -1, (255,0,0))
+    #     cv2.drawContours(self.image, [cell_contour, hx, vx], -1, (0,0,255))
+    #     cv2.imwrite('intersections.png', self.image)
+    #endregion
 
-fd = open('wordle-game-4.png', 'rb')
+    def _generate_comparison_masks(self) -> None:
+        assert len(self.cell_contours) > 0, 'This function must be called after the cell contours have been generated.'
+        _, _, target_size, _ = cv2.boundingRect(self.cell_contours[0])
+        
+        # Preferable interpolation methods are cv.INTER_AREA for shrinking and cv.INTER_CUBIC (slow)
+        # & cv.INTER_LINEAR for zooming. By default, the interpolation method cv.INTER_LINEAR is used
+        # for all resizing purposes. [https://docs.opencv.org/4.x/da/d6e/tutorial_py_geometric_transformations.html]
+        interp_mode = cv2.INTER_AREA if target_size < 155 else cv2 .INTER_LINEAR
+
+        prepared_masks = []
+        for char in self._alphabet:
+            mask = cv2.imread(f'lib/character_masks/{char}.png', cv2.IMREAD_UNCHANGED)
+            mask = cv2.resize(mask, (target_size, target_size), interpolation=interp_mode)
+            prepared_masks.append(mask)
+
+        self.char_compare_masks = prepared_masks
+    
+    def _generate_data(self) -> None:
+        self.grayscale = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+
+        # Cell data
+        _, cells_mask = cv2.threshold(self.grayscale, 18, 255, cv2.THRESH_BINARY)
+        self.cell_contours, _ = cv2.findContours(cells_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Character data
+        self._generate_comparison_masks()
+        self._generate_char_masks()
+
+    def _generate_char_masks(self):
+        _, chars_mask = cv2.threshold(self.grayscale, 200, 255, cv2.THRESH_BINARY)
+        masks = []
+        for c in self.cell_contours:
+            x, y, w, h = cv2.boundingRect(c)
+            _, mask = cv2.threshold(chars_mask[y:y+h, x:x+w], 200, 255, cv2.THRESH_BINARY)
+            masks.append(mask)
+        masks.reverse()
+        self.char_masks = masks
+
+    def _max_union(self):
+
+        def hull_area(points):
+            return cv2.contourArea(cv2.convexHull(points))
+
+        guesses = []
+        running_guess = ''
+        for i, cmask in enumerate(self.char_masks):
+            __max_union_area = 0
+            max_index = 0
+            # detect_e = []
+            # detect_q = []
+            for j, compmask in enumerate(self.char_compare_masks):
+                union_area = cv2.countNonZero(cv2.bitwise_and(cmask, compmask))
+
+                if union_area > __max_union_area:
+                    __max_union_area = union_area
+                    max_index = j
+                    max_compmask = compmask
+                    # if j == self._alphabet.index('e'):
+                    #     detect_e.append(j)
+                    # elif j == self._alphabet.index('q'):
+                    #     detect_q.append(j)
+
+            # currently this makes the following mistakes:
+            #   L -> E
+            #   O -> Q
+            char = self._alphabet[max_index]
+            if char == 'e':
+                cmask_area = cv2.countNonZero(cmask)
+                compmask_area = cv2.countNonZero(max_compmask)
+                print(f'cmask: {cmask_area}\ncompmask: {compmask_area}\nunion: {__max_union_area}')
+                # cmask_hull_area = hull_area(cv2.findContours(cmask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE))
+                # compmask_hull_area = hull_area(self.char_compare_masks[maxindex])
+                # print(f'"L":\t\tcmask_hull_area = {cmask_hull_area}\n'
+                #     f'    \t\tcompmask_hull_area = {compmask_hull_area}')
+
+            elif char == 'q':
+                pass
+
+            running_guess += char
+
+            if len(running_guess) == 5:
+                guesses.append(running_guess)
+                running_guess = ''
+        return guesses
+
+
+
+
+fd = open('wordle-game-1.png', 'rb')
 image_bytes = fd.read()
 fd.close()
-image_processor = WordleImageProcessor(image=image_bytes)
-image_processor.asdf()
 
+imgproc = WordleImageProcessor(image_bytes)
+beg = time.perf_counter()
+guesses = imgproc._max_union()
+end = time.perf_counter()
+print(f'[{end-beg}s]: {guesses}')
 
-# image = cv2.imread('characters.png')
-# gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-# _, mask = cv2.threshold(gray, BG_DARK>>16, 255, cv2.THRESH_BINARY)
-# cv2.imwrite('mask.png', mask)
-# # _, mask = cv2.threshold(gray, BORDER_DARK>>16, 255, cv2.THRESH_BINARY)
-# # cv2.imwrite('mask.png', mask)
-# contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-# new_image = cv2.drawContours(image, contours, -1, (0,0,255))
-# cv2.imwrite('contours.png', new_image)
-
-
-# fd = open('wordle-game-4.png', 'rb')
-# image_bytes = fd.read()
-# fd.close()
-# image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
-# gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-# _, game_char_mask = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
-# cv2.imwrite('charmask.png', game_char_mask)
-# _, game_cell_mask = cv2.threshold(gray, BG_DARK>>16, 255, cv2.THRESH_BINARY)
-# cv2.imwrite('mask.png', game_cell_mask)
-# cell_contours, _ = cv2.findContours(game_cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-# new_image = cv2.drawContours(image, cell_contours, -1, (0,0,255))
-# cv2.imwrite('contours.png', new_image)
-# char_masks = [cv2.imread(f'lib/character_masks/{char}.png') for char in 'abcdefghijklmnopqrstuvwxyz']
-# from collections import Counter
-# for contour in cell_contours:
-#     x, y, w, h = cv2.boundingRect(contour)
-#     user_char_mask = game_char_mask[y:y+h,x:x+w]
-#     fits = []
-#     for mask in char_masks:
-#         print(len(user_char_mask), len(mask))
-#         anded = cv2.bitwise_and(user_char_mask, mask)
-#         counter = Counter(anded).most_common()[0][1]
-#         print(counter)
-#         quit()
-        
 
 # # generate each character mask
+# fd = open('characters.png', 'rb')
+# image_bytes = fd.read()
+# fd.close()
+# img = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+# gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+# _, mask = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY)
+# contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 # for c, char in zip(contours, 'zyxwvutsrqponmlkjihgfedcba'):
 #     x, y, w, h = cv2.boundingRect(c)
 #     offset = int(w * 0.2)
@@ -523,19 +566,3 @@ image_processor.asdf()
 #     char_mask[:,:5] = 0
 #     char_mask[:,w-5:] = 0
 #     cv2.imwrite(f'lib/character_masks/{char}.png', char_mask)
-
-
-# # draw lines across the character masks and count the number of
-# # intersections to determine the character?
-# for c in contours:
-#     x, y, w, h = cv2.boundingRect(c)
-#     cv2.line(
-#         new_image,
-#         (x, y+h//2),
-#         (x+w, y+h//2),
-#         (0,255,0))
-#     cv2.line(
-#         new_image,
-#         (x+w//2, y),
-#         (x+w//2, y+h),
-#         (0,255,0))
