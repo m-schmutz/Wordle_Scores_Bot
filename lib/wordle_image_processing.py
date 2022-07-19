@@ -224,11 +224,21 @@ def image_to_guess_list(bytes: bytes) -> 'list[str]':
 """
 
 from typing import Any
+from xml.dom.pulldom import default_bufsize
 import cv2
 import numpy as np
 import time
-# from collections import Counter
-# from math import sqrt
+
+
+def timer(func):
+    beg = time.perf_counter()
+    ret = func()
+    end = time.perf_counter()
+    print(f'[{end-beg}] seconds.')
+    return ret
+
+
+
 
 """ The following information was gathered directly from https://www.nytimes.com/games/wordle/index.html.
 FILE: wordle.de5cb286f0d33d9aff3bbedee6ec2ae37d46994f.js
@@ -247,13 +257,13 @@ PURPOSE: Set the width and height of the board on window.resize
     }"..............at (1, 157887)
 """
 
-GRID_NUM_COLS       = 5
-GRID_NUM_ROWS       = 6
-GRID_GAP            = 5
-GRID_MAX_WIDTH      = 350
-GRID_MAX_HEIGHT     = 420
-GRID_MAX_CELL_SIZE  = 62
-GRID_PADDING        = 10
+GRID_COLS   = 5
+GRID_ROWS   = 6
+
+# these should be treated as ratios to one-another
+GRID_GAP    = 5
+GRID_WIDTH  = 330
+GRID_HEIGHT = 400
 
 BG          = 0xffffff  # :root/--color-tone-7
 BG_DARK     = 0x121213  # .dark/--color-tone-7
@@ -266,49 +276,52 @@ GRAY_DARK   = 0x3a3a3c  # .dark/--color-tone-4
 BORDER      = 0xd3d6da
 BORDER_DARK = 0x3a3a3c
 
-# class Contours
-
 class WordleImageProcessor:
     def __init__(self, image: bytes, *, error_margin: int = 2) -> None:
-        self._alphabet = 'abcdefghijklmnopqrstuvwxyz'
         self.image: np.ndarray  = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
         self.error_margin: int  = error_margin
-        self._generate_data()
 
-    # if length2 in [length1-error_margin, length1+error_margin] -> True
-    # otherwise -> False
-    def _within_error_margin(self, /, length1: int, length2: int, error_margin: int) -> bool:
-        # bottom half of error margin
-        if length1 < length2 - error_margin:
-            return False
-        
-        # top half of error margin
-        if length1 > length2 + error_margin:
-            return False
-
-        return True
-
-    # Returns all contours that are squares (EFFECTED BY ERROR_MARGIN)
-    def _square_contours(self, contours: 'list[np.ndarray]') -> 'list[np.ndarray]':
-        square_contours: list[np.ndarray] = []
-        for contour in contours:
-            # disregard any contours that are not a quadrilateral
-            if len(contour) != 4:
-                continue
-            
-            # disregard any contour whose bounding box is not ~square
-            _, _, w, h = cv2.boundingRect(contour)
-            if not self._within_error_margin(w, h, self.error_margin):
-                continue
-
-            # keep all ~square contours
-            square_contours.append(np.squeeze(contour))
-
-        # print(f'Keeping {len(square_contours)}...')
-        return square_contours
+        self._alphabet: str = 'abcdefghijklmnopqrstuvwxyz'
+        self._alphabet_masks: list[cv2.Mat] = []
+        self._cell_contours: list[np.ndarray] = []
+        self._letter_masks: list[np.ndarray] = []
+        self._init_data()
 
     #region unused functions
-        # Tries to find the character cell contours and returns them in a list.
+
+    # # if length2 in [length1-error_margin, length1+error_margin] -> True
+    # # otherwise -> False
+    # def _within_error_margin(self, /, length1: int, length2: int, error_margin: int) -> bool:
+    #     # bottom half of error margin
+    #     if length1 < length2 - error_margin:
+    #         return False
+        
+    #     # top half of error margin
+    #     if length1 > length2 + error_margin:
+    #         return False
+
+    #     return True
+
+    # # Returns all contours that are squares (EFFECTED BY ERROR_MARGIN)
+    # def _square_contours(self, contours: 'list[np.ndarray]') -> 'list[np.ndarray]':
+    #     square_contours: list[np.ndarray] = []
+    #     for contour in contours:
+    #         # disregard any contours that are not a quadrilateral
+    #         if len(contour) != 4:
+    #             continue
+            
+    #         # disregard any contour whose bounding box is not ~square
+    #         _, _, w, h = cv2.boundingRect(contour)
+    #         if not self._within_error_margin(w, h, self.error_margin):
+    #             continue
+
+    #         # keep all ~square contours
+    #         square_contours.append(np.squeeze(contour))
+
+    #     # print(f'Keeping {len(square_contours)}...')
+    #     return square_contours
+
+    # Tries to find the character cell contours and returns them in a list.
     # def find_cell_contours(self) -> 'list[np.ndarray]':
         # # reduce the number of contours by limiting their shape to be strictly squares, within ERROR_MARGIN
         # _, mask = cv2.threshold(self.grayscale_mat, 50, 255, cv2.THRESH_BINARY)
@@ -407,22 +420,21 @@ class WordleImageProcessor:
     #                 ]]
     #     return self._ideal_cell_contours
 
-
     # def intersectConvex(self):
-    # # generate masks
+    #     # generate masks
     #     _, game_cell_mask = cv2.threshold(self.grayscale_mat, BG_DARK>>16, 255, cv2.THRESH_BINARY)
     #     cv2.imwrite('cell_mask.png', game_cell_mask)
     #     _, game_char_mask = cv2.threshold(self.grayscale_mat, 200, 255, cv2.THRESH_BINARY)
     #     cv2.imwrite('char_mask.png', game_char_mask)
         
-    # # find contours
-    #     self.cell_contours, _ = cv2.findContours(game_cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    #     cv2.imwrite('cell_contours.png', cv2.drawContours(self.image.copy(), self.cell_contours, -1, (0,0,255)))
+    #     # find contours
+    #     self._cell_contours, _ = cv2.findContours(game_cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    #     cv2.imwrite('cell_contours.png', cv2.drawContours(self.image.copy(), self._cell_contours, -1, (0,0,255)))
     #     self.char_contours, _ = cv2.findContours(game_char_mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
     #     cv2.imwrite('char_contours.png', cv2.drawContours(self.image.copy(), self.char_contours, -1, (0,0,255)))
 
-    # # create line contours
-    #     cell_contour = np.squeeze(self.cell_contours[0])
+    #     # create line contours
+    #     cell_contour = np.squeeze(self._cell_contours[0])
     #     char_contour = np.squeeze(self.char_contours[0])
     #     char_contour_convex = cv2.convexHull(char_contour)
     #     x, y, w, h = cv2.boundingRect(char_contour_convex)
@@ -448,94 +460,64 @@ class WordleImageProcessor:
     #     cv2.drawContours(self.image, [char_contour_convex], -1, (255,0,0))
     #     cv2.drawContours(self.image, [cell_contour, hx, vx], -1, (0,0,255))
     #     cv2.imwrite('intersections.png', self.image)
+
     #endregion
 
-    def _generate_comparison_masks(self) -> None:
-        assert len(self.cell_contours) > 0, 'This function must be called after the cell contours have been generated.'
-        _, _, target_size, _ = cv2.boundingRect(self.cell_contours[0])
+    # Initializes the game-board data we need in order to process the guesses.
+    def _init_data(self) -> None:
+        # Convert image to grayscale to use for mask generation.
+        grayscale = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+
+        # Generate a list of contours of the game-board's cells.
+        cells_mask = cv2.threshold(grayscale, 18, 255, cv2.THRESH_BINARY)[1]
+        cell_contours = cv2.findContours(
+            image = cells_mask,
+            mode = cv2.RETR_EXTERNAL,
+            method = cv2.CHAIN_APPROX_SIMPLE)[0]
+        self._cell_contours = [ np.squeeze(contour) for contour in cell_contours ]
+
+        # Load and setup the letter comparison masks/filters.
+        default_size = 155
+        cell_size = cv2.boundingRect(cell_contours[0])[2]
+        filters = [ cv2.imread(f'lib/character_masks/{char}.png', cv2.IMREAD_UNCHANGED)
+            for char in self._alphabet ]
+        if cell_size != default_size:
+            # Resize the masks to fit self's image.
+            # Preferalbe interpolation methods: https://docs.opencv.org/4.x/da/d6e/tutorial_py_geometric_transformations.html
+            interp_mode = cv2.INTER_AREA if cell_size < default_size else cv2.INTER_LINEAR
+            filters = [ cv2.resize(m, (cell_size, cell_size), interpolation=interp_mode)
+                for m in filters ]
+        self._alphabet_masks = filters
+
+        # Generate a list of masks of the guessed letters.
+        # Because cv2.findContours() works right-to-left bottom-up, we reverse the list to maintain indexing order across this class.
+        letters_mask = cv2.threshold(grayscale, 200, 255, cv2.THRESH_BINARY)[1]
+        self._letter_masks = [ cv2.threshold(letters_mask[y:y+cell_size, x:x+cell_size], 200, 255, cv2.THRESH_BINARY)[1]
+            for (x, y), _, _, _ in self._cell_contours ]
+        self._letter_masks.reverse()
+
+    # Returns the character that best matches the given mask.
+    def _letter_from_mask(self, char_mask) -> str:
+        # Generate a list of unions (logical ANDs) between char_mask and all alphabet masks.
+        union_areas = [ cv2.countNonZero(cv2.bitwise_and(char_mask, alpha_mask))
+            for alpha_mask in self._alphabet_masks ]
         
-        # Preferable interpolation methods are cv.INTER_AREA for shrinking and cv.INTER_CUBIC (slow)
-        # & cv.INTER_LINEAR for zooming. By default, the interpolation method cv.INTER_LINEAR is used
-        # for all resizing purposes. [https://docs.opencv.org/4.x/da/d6e/tutorial_py_geometric_transformations.html]
-        interp_mode = cv2.INTER_AREA if target_size < 155 else cv2 .INTER_LINEAR
+        # Get the union with the largest overlap and return the corresponding alphabetic character.
+        return self._alphabet[union_areas.index(max(union_areas))]
 
-        prepared_masks = []
-        for char in self._alphabet:
-            mask = cv2.imread(f'lib/character_masks/{char}.png', cv2.IMREAD_UNCHANGED)
-            mask = cv2.resize(mask, (target_size, target_size), interpolation=interp_mode)
-            prepared_masks.append(mask)
-
-        self.char_compare_masks = prepared_masks
-    
-    def _generate_data(self) -> None:
-        self.grayscale = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
-
-        # Cell data
-        _, cells_mask = cv2.threshold(self.grayscale, 18, 255, cv2.THRESH_BINARY)
-        self.cell_contours, _ = cv2.findContours(cells_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        # Character data
-        self._generate_comparison_masks()
-        self._generate_char_masks()
-
-    def _generate_char_masks(self):
-        _, chars_mask = cv2.threshold(self.grayscale, 200, 255, cv2.THRESH_BINARY)
-        masks = []
-        for c in self.cell_contours:
-            x, y, w, h = cv2.boundingRect(c)
-            _, mask = cv2.threshold(chars_mask[y:y+h, x:x+w], 200, 255, cv2.THRESH_BINARY)
-            masks.append(mask)
-        masks.reverse()
-        self.char_masks = masks
-
-    def _max_union(self):
-
-        def hull_area(points):
-            return cv2.contourArea(cv2.convexHull(points))
-
+    # currently this makes the following mistakes:
+    #   L -> E
+    #   O -> Q
+    # @timer
+    def get_guesses(self) -> 'list[str]':
         guesses = []
         running_guess = ''
-        for i, cmask in enumerate(self.char_masks):
-            __max_union_area = 0
-            max_index = 0
-            # detect_e = []
-            # detect_q = []
-            for j, compmask in enumerate(self.char_compare_masks):
-                union_area = cv2.countNonZero(cv2.bitwise_and(cmask, compmask))
-
-                if union_area > __max_union_area:
-                    __max_union_area = union_area
-                    max_index = j
-                    max_compmask = compmask
-                    # if j == self._alphabet.index('e'):
-                    #     detect_e.append(j)
-                    # elif j == self._alphabet.index('q'):
-                    #     detect_q.append(j)
-
-            # currently this makes the following mistakes:
-            #   L -> E
-            #   O -> Q
-            char = self._alphabet[max_index]
-            if char == 'e':
-                cmask_area = cv2.countNonZero(cmask)
-                compmask_area = cv2.countNonZero(max_compmask)
-                print(f'cmask: {cmask_area}\ncompmask: {compmask_area}\nunion: {__max_union_area}')
-                # cmask_hull_area = hull_area(cv2.findContours(cmask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE))
-                # compmask_hull_area = hull_area(self.char_compare_masks[maxindex])
-                # print(f'"L":\t\tcmask_hull_area = {cmask_hull_area}\n'
-                #     f'    \t\tcompmask_hull_area = {compmask_hull_area}')
-
-            elif char == 'q':
-                pass
-
-            running_guess += char
-
+        for mask in self._letter_masks:
+            running_guess += self._letter_from_mask(mask)
             if len(running_guess) == 5:
                 guesses.append(running_guess)
                 running_guess = ''
         return guesses
-
-
 
 
 fd = open('wordle-game-1.png', 'rb')
@@ -543,11 +525,8 @@ image_bytes = fd.read()
 fd.close()
 
 imgproc = WordleImageProcessor(image_bytes)
-beg = time.perf_counter()
-guesses = imgproc._max_union()
-end = time.perf_counter()
-print(f'[{end-beg}s]: {guesses}')
-
+guesses = imgproc.get_guesses()
+print(guesses)
 
 # # generate each character mask
 # fd = open('characters.png', 'rb')
