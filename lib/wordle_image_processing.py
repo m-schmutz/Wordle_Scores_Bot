@@ -1,5 +1,4 @@
-"""
-# Tesseract Manual: https://github.com/tesseract-ocr/tesseract/blob/main/doc/tesseract.1.asc
+"""# Tesseract Manual: https://github.com/tesseract-ocr/tesseract/blob/main/doc/tesseract.1.asc
 from typing import Any
 import cv2
 from cv2 import contourArea
@@ -223,21 +222,19 @@ def image_to_guess_list(bytes: bytes) -> 'list[str]':
 
 """
 
-from typing import Any
-from xml.dom.pulldom import default_bufsize
 import cv2
 import numpy as np
 import time
 
 
 def timer(func):
-    beg = time.perf_counter()
-    ret = func()
-    end = time.perf_counter()
-    print(f'[{end-beg}] seconds.')
-    return ret
-
-
+    def _inner(*args, **kwargs):
+        beg = time.perf_counter()
+        ret = func(*args, **kwargs)
+        end = time.perf_counter()
+        print(f'{func.__name__}: [{end-beg}s]')
+        return ret
+    return _inner
 
 
 """ The following information was gathered directly from https://www.nytimes.com/games/wordle/index.html.
@@ -278,14 +275,65 @@ BORDER_DARK = 0x3a3a3c
 
 class WordleImageProcessor:
     def __init__(self, image: bytes, *, error_margin: int = 2) -> None:
-        self.image: np.ndarray  = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
-        self.error_margin: int  = error_margin
+        self.grayscale:cv2.Mat
+        self.chmasks:list[cv2.Mat]
+        self.user_chmasks:list[cv2.Mat]
+        self.user_contours:list[np.ndarray]
 
-        self._alphabet: str = 'abcdefghijklmnopqrstuvwxyz'
-        self._alphabet_masks: list[cv2.Mat] = []
-        self._cell_contours: list[np.ndarray] = []
-        self._letter_masks: list[np.ndarray] = []
-        self._init_data()
+        self.alphabet:str = 'abcdefghijklmnopqrstuvwxyz'
+        self.image:cv2.Mat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+        self.error_margin:int = error_margin
+
+
+        ### Initialize the game-board data
+        # Convert image to grayscale to use for mask generation.
+        self.grayscale = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+
+    ############# TODO: Programatically find the board!!! ################
+
+        # Generate a list of contours of the game-board's cells.
+        _, cells_mask = cv2.threshold(self.grayscale, 18, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(
+            image = cells_mask,
+            mode = cv2.RETR_EXTERNAL,
+            method = cv2.CHAIN_APPROX_SIMPLE)
+        # cv2.imwrite('masks_test.png', cells_mask)
+        # cv2.imwrite('contours_test.png', cv2.drawContours(self.image, self.user_contours, -1, (0,0,255)))
+        # quit()
+
+    ############# Assuming we have ONLY the cell contours ##############
+        self.user_contours = list(np.squeeze(c) for c in contours)
+        _, _, user_cellsize, _ = cv2.boundingRect(self.user_contours[0])
+
+
+        ### Setup letter masks
+        # Load and setup the letter comparison masks/filters.
+        filters = list(cv2.imread(f'lib/character_masks/{char}.png', cv2.IMREAD_UNCHANGED)
+            for char in self.alphabet)
+
+        # Resize the masks to fit self's image, if necessary.
+        # [Preferalbe resize interpolation methods](https://docs.opencv.org/4.x/da/d6e/tutorial_py_geometric_transformations.html)
+        cellsize = 155
+        if user_cellsize != cellsize:
+            if user_cellsize < cellsize:
+                filters = list(cv2.resize(m, (user_cellsize, user_cellsize), interpolation=cv2.INTER_AREA)
+                    for m in filters)
+            else:
+                r = cellsize / user_cellsize
+                h, w = map(lambda a: int(a*r), self.grayscale.shape[:2])
+                self.grayscale = cv2.resize(self.grayscale, (w, h), interpolation=cv2.INTER_LINEAR)
+                quit('IMPLEMENT THIS HAHA')
+
+        self.chmasks = filters
+
+        ### Generate a list of masks of the guessed letters.
+        # Because cv2.findContours() works right-to-left bottom-up, we 
+        # reverse the list to maintain indexing order across this class.
+        _, user_chmask_img = cv2.threshold(self.grayscale, 200, 255, cv2.THRESH_BINARY)
+        user_chmasks = list(user_chmask_img[y:y+user_cellsize, x:x+user_cellsize]
+            for (x, y), _, _, _ in self.user_contours)
+        user_chmasks.reverse()
+        self.user_chmasks = user_chmasks
 
     #region unused functions
 
@@ -463,56 +511,44 @@ class WordleImageProcessor:
 
     #endregion
 
-    # Initializes the game-board data we need in order to process the guesses.
-    def _init_data(self) -> None:
-        # Convert image to grayscale to use for mask generation.
-        grayscale = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
 
-        # Generate a list of contours of the game-board's cells.
-        cells_mask = cv2.threshold(grayscale, 18, 255, cv2.THRESH_BINARY)[1]
-        cell_contours = cv2.findContours(
-            image = cells_mask,
-            mode = cv2.RETR_EXTERNAL,
-            method = cv2.CHAIN_APPROX_SIMPLE)[0]
-        self._cell_contours = [ np.squeeze(contour) for contour in cell_contours ]
-
-        # Load and setup the letter comparison masks/filters.
-        default_size = 155
-        cell_size = cv2.boundingRect(cell_contours[0])[2]
-        filters = [ cv2.imread(f'lib/character_masks/{char}.png', cv2.IMREAD_UNCHANGED)
-            for char in self._alphabet ]
-        if cell_size != default_size:
-            # Resize the masks to fit self's image.
-            # Preferalbe interpolation methods: https://docs.opencv.org/4.x/da/d6e/tutorial_py_geometric_transformations.html
-            interp_mode = cv2.INTER_AREA if cell_size < default_size else cv2.INTER_LINEAR
-            filters = [ cv2.resize(m, (cell_size, cell_size), interpolation=interp_mode)
-                for m in filters ]
-        self._alphabet_masks = filters
-
-        # Generate a list of masks of the guessed letters.
-        # Because cv2.findContours() works right-to-left bottom-up, we reverse the list to maintain indexing order across this class.
-        letters_mask = cv2.threshold(grayscale, 200, 255, cv2.THRESH_BINARY)[1]
-        self._letter_masks = [ cv2.threshold(letters_mask[y:y+cell_size, x:x+cell_size], 200, 255, cv2.THRESH_BINARY)[1]
-            for (x, y), _, _, _ in self._cell_contours ]
-        self._letter_masks.reverse()
+    def _within_error_margin(self, /, valA: int, valB: int) -> bool:
+        return (valA >= (valB - self.error_margin)) and (valA <= (valB + self.error_margin))
 
     # Returns the character that best matches the given mask.
-    def _letter_from_mask(self, char_mask) -> str:
-        # Generate a list of unions (logical ANDs) between char_mask and all alphabet masks.
-        union_areas = [ cv2.countNonZero(cv2.bitwise_and(char_mask, alpha_mask))
-            for alpha_mask in self._alphabet_masks ]
-        
-        # Get the union with the largest overlap and return the corresponding alphabetic character.
-        return self._alphabet[union_areas.index(max(union_areas))]
-
     # currently this makes the following mistakes:
     #   L -> E
     #   O -> Q
-    # @timer
+    def _letter_from_mask(self, user_chmask) -> str:
+        # Generate a list of intersections (logical ANDs)
+        # between character masks and user character masks.
+
+        # intx_areas = list(
+        #     cv2.countNonZero(
+        #         cv2.bitwise_and(user_chmask, chmask))
+        #     for chmask in self.chmasks)
+
+        user_chmask_count = cv2.countNonZero(user_chmask)
+        sets = np.zeros((26,2), dtype=np.int16)
+        for i, chmask in enumerate(self.chmasks):
+            intx = cv2.countNonZero(cv2.bitwise_and(user_chmask, chmask))
+            if self._within_error_margin(intx, user_chmask_count):
+                sets[i] = (
+                    intx,
+                    cv2.countNonZero(cv2.bitwise_xor(user_chmask, chmask))
+                )
+
+        lst = list(sets.argmin(axis=1))
+        char = self.alphabet[lst.index(1)]
+        print(char, lst)
+        return char
+        # we run into error when looking at empty cells
+
+    @timer
     def get_guesses(self) -> 'list[str]':
         guesses = []
         running_guess = ''
-        for mask in self._letter_masks:
+        for mask in self.user_chmasks:
             running_guess += self._letter_from_mask(mask)
             if len(running_guess) == 5:
                 guesses.append(running_guess)
@@ -520,28 +556,12 @@ class WordleImageProcessor:
         return guesses
 
 
-fd = open('wordle-game-1.png', 'rb')
-image_bytes = fd.read()
-fd.close()
+if __name__ == '__main__':
+    fd = open('wordle-game-1.png', 'rb')
+    image_bytes = fd.read()
+    fd.close()
 
-imgproc = WordleImageProcessor(image_bytes)
-guesses = imgproc.get_guesses()
-print(guesses)
+    imgproc = WordleImageProcessor(image_bytes)
+    guesses = imgproc.get_guesses()
+    print(guesses)
 
-# # generate each character mask
-# fd = open('characters.png', 'rb')
-# image_bytes = fd.read()
-# fd.close()
-# img = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
-# gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-# _, mask = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY)
-# contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-# for c, char in zip(contours, 'zyxwvutsrqponmlkjihgfedcba'):
-#     x, y, w, h = cv2.boundingRect(c)
-#     offset = int(w * 0.2)
-#     char_mask = mask[y:y+h, x:x+w]
-#     char_mask[:5,:] = 0
-#     char_mask[h-5:,:] = 0
-#     char_mask[:,:5] = 0
-#     char_mask[:,w-5:] = 0
-#     cv2.imwrite(f'lib/character_masks/{char}.png', char_mask)
