@@ -1,118 +1,141 @@
-def _esc(val):
+def _esc(val) -> str:
     return f'\033[{val}'
+CLEARLINE   = _esc('2K')
+CURSOR_UP   = _esc('1A')
+HIDE_CURSOR = _esc('?25l')
+SHOW_CURSOR = _esc('?25h')
 
 class ansi:
+    def __init__(self, string:str = None) -> None:
+        self._string = string
+    def __repr__(self) -> str:
+        return self._string
+    def __str__(self) -> str:
+        return self._string
+    def __add__(self, other):
+        self._string += other
+        return self
 
-    CLEARLINE   = _esc('2K')
-    CURSOR_UP   = _esc('1A')
-    HIDE_CURSOR = _esc('?25l')
-    SHOW_CURSOR = _esc('?25h')
-
-    _reset      = _esc('0m')
-    _bold       = _esc('1m')
-    _italic     = _esc('3m')
-    _underline  = _esc('4m')
-
+class sgr(ansi):
     class fg:
-        black   = _esc('30m')
-        red     = _esc('31m')
-        green   = _esc('32m')
-        yellow  = _esc('33m')
-        blue    = _esc('34m')
-        magenta = _esc('35m')
-        cyan    = _esc('36m')
-        white   = _esc('37m')
+        black,\
+        red,\
+        green,\
+        yellow,\
+        blue,\
+        magenta,\
+        cyan,\
+        white = (_esc(f'3{i}m') for i in range(8))
 
         def rgb(r, g, b):
             return _esc(f'38;2;{r};{g};{b}m')
-
     class bg:
-        black   = _esc('40m')
-        red     = _esc('41m')
-        green   = _esc('42m')
-        yellow  = _esc('43m')
-        blue    = _esc('44m')
-        magenta = _esc('45m')
-        cyan    = _esc('46m')
-        white   = _esc('47m')
+        black,\
+        red,\
+        green,\
+        yellow,\
+        blue,\
+        magenta,\
+        cyan,\
+        white = (_esc(f'4{i}m') for i in range(8))
 
         def rgb(r, g, b):
             return _esc(f'48;2;{r};{g};{b}m')
 
-    def __init__(self, string):
-        self._string = string
+    def __init__(self, string) -> None:
+        super().__init__(string)
+        self._reset,\
+        self._bold,\
+        self._faint,\
+        self._italic,\
+        self._underline = (_esc(f'{i}m') for i in range(5))
 
-    def __str__(self):
-        return self._string
+    # Update the underlying string
+    def apply(self, sequence:str):
+        self._string = sequence + self._string + self._reset
+        return self
 
-    def __add__(self, other):
-        return self._string + other
-
+    # Font
     def bold(self):
-        return ansi._bold + self._string + ansi._reset
-
+        return self.apply(self._bold)
+    def faint(self):
+        return self.apply(self._faint)
     def italic(self):
-        return ansi._italic + self._string + ansi._reset
-
+        return self.apply(self._italic)
     def underline(self):
-        return ansi._underline + self._string + ansi._reset
+        return self.apply(self._underline)
 
+    # Colors
+    def black(self, bg=False):
+        return self.apply(self.bg.black if bg else self.fg.black)
+    def blue(self, bg=False):
+        return self.apply(self.bg.blue if bg else self.fg.blue)
+    def cyan(self, bg=False):
+        return self.apply(self.bg.cyan if bg else self.fg.cyan)
+    def green(self, bg=False):
+        return self.apply(self.bg.green if bg else self.fg.green)
+    def magenta(self, bg=False):
+        return self.apply(self.bg.magenta if bg else self.fg.magenta)
+    def red(self, bg=False):
+        return self.apply(self.bg.red if bg else self.fg.red)
+    def white(self, bg=False):
+        return self.apply(self.bg.white if bg else self.fg.white)
+    def yellow(self, bg=False):
+        return self.apply(self.bg.yellow if bg else self.fg.yellow)
     def rgb(self, r=0, g=0, b=0, bg=False):
-        if bg:
-            return ansi.bg.rgb(r, g, b) + self._string + ansi._reset
+        return self.apply(self.bg.rgb(r, g, b) if bg else self.fg.rgb(r, g, b))
 
-        return ansi.fg.rgb(r, g, b) + self._string + ansi._reset
+class cursor(ansi):
+    def __init__(self) -> None:
+        super().__init__(string='')
 
-    def black(self, fg=True):
-        if fg:
-            return ansi.fg.black + self._string + ansi._reset
-        
-        return ansi.bg.black + self._string + ansi._reset
+    def apply(self, sequence:str):
+        self._string = _esc(sequence)
+        return self
 
-    def red(self, fg=True):
-        if fg:
-            return ansi.fg.red + self._string + ansi._reset
-        
-        return ansi.bg.red + self._string + ansi._reset
+    def up(self, n:int = 1):
+        return self.apply(f'{n}A')
 
-    def green(self, fg=True):
-        if fg:
-            return ansi.fg.green + self._string + ansi._reset
-        
-        return ansi.bg.green + self._string + ansi._reset
+    def down(self, n:int = 1):
+        return self.apply(f'{n}B')
 
-    def yellow(self, fg=True):
-        if fg:
-            return ansi.fg.yellow + self._string + ansi._reset
-        
-        return ansi.bg.yellow + self._string + ansi._reset
+    def right(self, n:int = 1):
+        return self.apply(f'{n}C')
 
-    def blue(self, fg=True):
-        if fg:
-            return ansi.fg.blue + self._string + ansi._reset
-        
-        return ansi.bg.blue + self._string + ansi._reset
+    def left(self, n:int = 1):
+        return self.apply(f'{n}D')
 
-    def magenta(self, fg=True):
-        if fg:
-            return ansi.fg.magenta + self._string + ansi._reset
-        
-        return ansi.bg.magenta + self._string + ansi._reset
 
-    def cyan(self, fg=True):
-        if fg:
-            return ansi.fg.cyan + self._string + ansi._reset
-        
-        return ansi.bg.cyan + self._string + ansi._reset
 
-    def white(self, fg=True):
-        if fg:
-            return ansi.fg.white + self._string + ansi._reset
-        
-        return ansi.bg.white + self._string + ansi._reset
+### Forwarding functions, for convenience ###
+# SGR
+def bold(string) -> ansi:
+    return sgr(string).bold()
+def faint(string) -> ansi:
+    return sgr(string).faint()
+def italic(string) -> ansi:
+    return sgr(string).italic()
+def underline(string) -> ansi:
+    return sgr(string).underline()
+def black(string, bg=False) -> ansi:
+    return sgr(string).black(bg)
+def blue(string, bg=False) -> ansi:
+    return sgr(string).blue(bg)
+def cyan(string, bg=False) -> ansi:
+    return sgr(string).cyan(bg)
+def green(string, bg=False) -> ansi:
+    return sgr(string).green(bg)
+def magenta(string, bg=False) -> ansi:
+    return sgr(string).magenta(bg)
+def red(string, bg=False) -> ansi:
+    return sgr(string).red(bg)
+def white(string, bg=False) -> ansi:
+    return sgr(string).white(bg)
+def yellow(string, bg=False) -> ansi:
+    return sgr(string).yellow(bg)
+def rgb(string, r=0, g=0, b=0, bg=False) -> ansi:
+    return sgr(string).rgb(r,g,b,bg)
 
-    def gray(self, fg=True):
-        if fg:
-            return self.rgb(150, 150, 150)
-
-        return self.rgb(150, 150, 150, bg=False)
+# Cursor
+def cursor_up(string, end=False):
+    return cursor(string)
