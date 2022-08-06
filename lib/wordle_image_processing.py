@@ -222,10 +222,14 @@ def image_to_guess_list(bytes: bytes) -> 'list[str]':
 
 """
 
+from random import randint
+from re import L
 import cv2
 import numpy as np
 import time
 import ansi
+import multiprocessing as mp
+from psutil import cpu_count
 
 
 def timer(func):
@@ -233,7 +237,7 @@ def timer(func):
         beg = time.perf_counter()
         ret = func(*args, **kwargs)
         end = time.perf_counter()
-        print(f'{func.__name__}: [{end-beg}s]')
+        print(f'[{end-beg:.06f}s] {func.__name__}:')
         return ret
     return _inner
 
@@ -255,47 +259,45 @@ PURPOSE: Set the width and height of the board on window.resize
     }"..............at (1, 157887)
 """
 
-GRID_COLS   = 5
-GRID_ROWS   = 6
+COLS = 5
+# ROWS = 6
 
 # these should be treated as ratios to one-another
-GRID_GAP    = 5
-GRID_WIDTH  = 330
-GRID_HEIGHT = 400
+# GRID_GAP    = 5
+# GRID_WIDTH  = 330
+# GRID_HEIGHT = 400
 
-BG          = 0xffffff  # :root/--color-tone-7
-BG_DARK     = 0x121213  # .dark/--color-tone-7
-GREEN       = 0x6aaa64  # :root/--green
-GREEN_DARK  = 0x538d4e  # :root/--darkendgreen
-YELLOW      = 0xc9b458  # :root/--yellow
-YELLOW_DARK = 0xb59f3b  # :root/--darkendyellow
-GRAY        = 0x787c7e  # :root/--color-tone-2
-GRAY_DARK   = 0x3a3a3c  # .dark/--color-tone-4
-BORDER      = 0xd3d6da
-BORDER_DARK = 0x3a3a3c
+# BG          = 0xffffff  # :root/--color-tone-7
+# BG_DARK     = 0x121213  # .dark/--color-tone-7
+# GREEN       = 0x6aaa64  # :root/--green
+# GREEN_DARK  = 0x538d4e  # :root/--darkendgreen
+# YELLOW      = 0xc9b458  # :root/--yellow
+# YELLOW_DARK = 0xb59f3b  # :root/--darkendyellow
+# GRAY        = 0x787c7e  # :root/--color-tone-2
+# GRAY_DARK   = 0x3a3a3c  # .dark/--color-tone-4
+# BORDER      = 0xd3d6da
+# BORDER_DARK = 0x3a3a3c
 
 class WordleImageProcessor:
     def __init__(self, image: bytes, *, area_margin: int = 50) -> None:
-        self.grayscale:cv2.Mat
-        self.alphabet_masks:list[cv2.Mat]
-        self.char_masks:list[cv2.Mat] = []
-        self.cells_mask:cv2.Mat
-        self.cell_contours:list[np.ndarray]
+        self.image: cv2.Mat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+        self.grayscale: cv2.Mat = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+        self.area_margin: int = area_margin
 
-        self.cellsize:int = 0
-        self.alphabet:str = 'abcdefghijklmnopqrstuvwxyz'
-        self.image:cv2.Mat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
-        self.area_margin:int = area_margin
+        self.alphabet: str = 'abcdefghijklmnopqrstuvwxyz'
+        self.alphabet_masks: list[cv2.Mat] = []
+        self.char_masks: list[cv2.Mat] = []
+        self.cells_mask: cv2.Mat = None
+        self.cell_contours: list[np.ndarray] = []
+        self.cellsize: int = 0
 
 
-        ### Initialize the game-board data
-        # Convert image to grayscale to use for mask generation.
-        self.grayscale = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+        self.asdf = 0
 
-    ############# TODO: Programatically find the board!!! ################
 
         # Generate a list of contours of the game-board's cells.
-        _, self.cells_mask = cv2.threshold(self.grayscale, 18, 255, cv2.THRESH_BINARY)
+        _, self.cells_mask = cv2.threshold(self.grayscale, 50, 255, cv2.THRESH_BINARY) # ASSUMES DARK THEME
+        cv2.imwrite('cells_mask.png', self.cells_mask)
         contours, _ = cv2.findContours(
             image = self.cells_mask,
             mode = cv2.RETR_EXTERNAL,
@@ -304,8 +306,11 @@ class WordleImageProcessor:
         # cv2.imwrite('contours_test.png', cv2.drawContours(self.image, self.user_contours, -1, (0,0,255)))
         # quit()
 
-    ############# Assuming we have ONLY the cell contours ##############
-        self.cell_contours = list(np.squeeze(c) for c in contours)
+        ############# TODO: Programatically find the board!!! ################
+        self.cell_contours = self.find_cells(contours)
+        ############# Assuming we have ONLY the cell contours ##############
+
+        # self.cell_contours = list(np.squeeze(c) for c in contours)
         _, _, self.cellsize, _ = cv2.boundingRect(self.cell_contours[0])
         alphabet_masksize = 155
 
@@ -331,259 +336,133 @@ class WordleImageProcessor:
         # reverse the list to maintain indexing order across this class.
         midpoint = self.cellsize // 2
         _, chars_mask = cv2.threshold(self.grayscale, 200, 255, cv2.THRESH_BINARY)
+        cv2.imwrite('chars_mask.png', chars_mask)
         for (x, y), _, _, _ in reversed(self.cell_contours):
             if not self.cells_mask[y+midpoint, x+midpoint]:
                 break
             self.char_masks.append(chars_mask[y:y+self.cellsize, x:x+self.cellsize])
 
-
-    #region unused functions
-
-    # # if length2 in [length1-error_margin, length1+error_margin] -> True
-    # # otherwise -> False
-    # def _within_error_margin(self, /, length1: int, length2: int, error_margin: int) -> bool:
-    #     # bottom half of error margin
-    #     if length1 < length2 - error_margin:
-    #         return False
-        
-    #     # top half of error margin
-    #     if length1 > length2 + error_margin:
-    #         return False
-
-    #     return True
-
-    # # Returns all contours that are squares (EFFECTED BY ERROR_MARGIN)
-    # def _square_contours(self, contours: 'list[np.ndarray]') -> 'list[np.ndarray]':
-    #     square_contours: list[np.ndarray] = []
-    #     for contour in contours:
-    #         # disregard any contours that are not a quadrilateral
-    #         if len(contour) != 4:
-    #             continue
+    def find_cells(self, contours):
+        square_contours: list[np.ndarray] = []
+        for contour in contours:
+            # disregard any contours that are not a quadrilateral
+            if len(contour) != 4:
+                continue
             
-    #         # disregard any contour whose bounding box is not ~square
-    #         _, _, w, h = cv2.boundingRect(contour)
-    #         if not self._within_error_margin(w, h, self.error_margin):
-    #             continue
+            # disregard any contour whose bounding box is not ~square
+            _, _, w, h = cv2.boundingRect(contour)
+            if abs(w - h) > 2:
+                continue
 
-    #         # keep all ~square contours
-    #         square_contours.append(np.squeeze(contour))
+            if w < 50:
+                continue
 
-    #     # print(f'Keeping {len(square_contours)}...')
-    #     return square_contours
+            # keep all ~square contours
+            square_contours.append(np.squeeze(contour))
 
-    # Tries to find the character cell contours and returns them in a list.
-    # def find_cell_contours(self) -> 'list[np.ndarray]':
-        # # reduce the number of contours by limiting their shape to be strictly squares, within ERROR_MARGIN
-        # _, mask = cv2.threshold(self.grayscale_mat, 50, 255, cv2.THRESH_BINARY)
-        # contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        # square_contours = self._square_contours(contours)
+        print(f'Keeping {len(square_contours)}...')
+        cv2.imwrite('out.png', cv2.drawContours(self.image, square_contours, -1, (0,0,255), 2))
+        return square_contours
 
-        #region add optional method By Grid:
-        # board_contour_coords = []
-        # streak = []
-        # for coord in contour_coords:
-
-        #     if len(streak) == 5:
-        #         print('potential game board row found!')
-        #         board_contour_coords += streak
-        #         streak = [coord]
-        #         continue
-
-        #     elif len(streak) == 0:
-        #         streak.append(coord)
-        #         continue
-
-        #     # if the current y-coord equals the previous y-coord,
-        #     # add coord to streak. if streak gets to length 5, we
-        #     # have found 5 contours on the same y-level in a row.
-        #     # this is likely to be a row from the game board, but we need
-        #     # to compare x-coords as well to be sure.
-        #     print(f'cur-y: {coord[1]}, prev-y: {streak[-1][1]}')
-        #     if coord[1] == streak[-1][1]:
-        #         streak.append(coord)
-        #         continue
-
-        #     streak = [coord]
-
-        # # print(contour_coords)
-        # print(board_contour_coords)
-        # # xs = Counter([x for (x, _) in board_contour_coords])
-        # ys = Counter([y for (_, y) in board_contour_coords])
-        # # print(xs)
-        # print(ys)
-        # quit()
-        #endregion
-
-        #region By Area
-        # areas = [cv2.contourArea(c) for c in square_contours]
-
-        # # tally the number of contours with unique areas
-        # counter = Counter(areas)
-        # print(counter)
-
-        # # grab the largest area
-        # max_area = counter.most_common()[0][0]
-        # print(max_area)
-
-        # # take the sqrt -> should be an integer since the majority of the cell contours are perfect squares
-        # sr = sqrt(max_area)
-        # print(sr)
-
-        # # assuming we successfully obtained the largest width, determine the
-        # # smallest acceptable area for a cell contour given ERROR_MARGIN. And...
-        # thresh = (sr - self.error_margin)**2
-        # print(thresh)
-
-        # # ...take only contours whose area is larger
-        # return [c for c in square_contours
-        #     if cv2.contourArea(c) > thresh]
-        #endregion
-
-    # # Returns a numpy array of the ideal character cell contours.
-    # def ideal_cell_contours(self) -> np.ndarray:
-    #     # generate ideal contours
-    #     spacer_lines = 0
-    #     self._ideal_cell_contours = np.zeros((GRID_NUM_COLS*GRID_NUM_ROWS,4,2), np.uint16)
-    #     for y in range(GRID_NUM_ROWS):
-    #         # The official webpage has an additional row of pixels between every two
-    #         # rows as a byproduct of CSS centering. This is how we mimic it:
-    #         if not y%2:
-    #             spacer_lines += 1
-
-    #         for x in range(GRID_NUM_COLS):
-    #             self._ideal_cell_contours[GRID_NUM_COLS*y+x] = [
-    #                 [
-    #                     GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP),
-    #                     GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines
-    #                 ],
-    #                 [
-    #                     GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP) + GRID_MAX_CELL_SIZE - 1,
-    #                     GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines
-    #                 ],
-    #                 [
-    #                     GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP) + GRID_MAX_CELL_SIZE - 1,
-    #                     GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines + GRID_MAX_CELL_SIZE - 1
-    #                 ],
-    #                 [
-    #                     GRID_PADDING + x*(GRID_MAX_CELL_SIZE + GRID_GAP),
-    #                     GRID_PADDING + y*(GRID_MAX_CELL_SIZE + GRID_GAP) + spacer_lines + GRID_MAX_CELL_SIZE - 1
-    #                 ]]
-    #     return self._ideal_cell_contours
-
-    # def intersectConvex(self):
-    #     # generate masks
-    #     _, game_cell_mask = cv2.threshold(self.grayscale_mat, BG_DARK>>16, 255, cv2.THRESH_BINARY)
-    #     cv2.imwrite('cell_mask.png', game_cell_mask)
-    #     _, game_char_mask = cv2.threshold(self.grayscale_mat, 200, 255, cv2.THRESH_BINARY)
-    #     cv2.imwrite('char_mask.png', game_char_mask)
-        
-    #     # find contours
-    #     self._cell_contours, _ = cv2.findContours(game_cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    #     cv2.imwrite('cell_contours.png', cv2.drawContours(self.image.copy(), self._cell_contours, -1, (0,0,255)))
-    #     self.char_contours, _ = cv2.findContours(game_char_mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
-    #     cv2.imwrite('char_contours.png', cv2.drawContours(self.image.copy(), self.char_contours, -1, (0,0,255)))
-
-    #     # create line contours
-    #     cell_contour = np.squeeze(self._cell_contours[0])
-    #     char_contour = np.squeeze(self.char_contours[0])
-    #     char_contour_convex = cv2.convexHull(char_contour)
-    #     x, y, w, h = cv2.boundingRect(char_contour_convex)
-
-    #     hoff = int(h*0.5)
-    #     hboxline = np.array([
-    #         [x,     y+hoff-1],
-    #         [x+w,   y+hoff-1],
-    #         [x+w,   y+hoff+1],
-    #         [x,     y+hoff+1]])
-    #     _, hx = cv2.intersectConvexConvex(char_contour, hboxline)
-    #     hx = np.squeeze(hx.astype(int))
-
-    #     voff = int(w*0.5)
-    #     vboxline = np.array([
-    #         [x+voff-1,    y],
-    #         [x+voff-1,    y+h],
-    #         [x+voff+1,    y+h],
-    #         [x+voff+1,    y]])
-    #     _, vx = cv2.intersectConvexConvex(char_contour_convex, vboxline)
-    #     vx = np.squeeze(vx.astype(int))
-        
-    #     cv2.drawContours(self.image, [char_contour_convex], -1, (255,0,0))
-    #     cv2.drawContours(self.image, [cell_contour, hx, vx], -1, (0,0,255))
-    #     cv2.imwrite('intersections.png', self.image)
-
-    #endregion
-
+    def __andCount(self, m1, m2) -> int:
+        return int(cv2.countNonZero(cv2.bitwise_and(m1, m2)))
+    
+    def __xorCount(self, m1, m2) -> int:
+        return int(cv2.countNonZero(cv2.bitwise_xor(m1, m2)))
 
     # Returns the character that best matches the given mask.
-    def determine_char(self, mask:cv2.Mat, use_margin:bool = False) -> str:
-        mask_count = cv2.countNonZero(mask)
-        index = None
+    def determine_char(self, mask: cv2.Mat, use_margin: bool = False) -> str:
+        if self.asdf in range(5):
+            data = []
+            for alphamask in self.alphabet_masks:
+                intx = self.__andCount(mask, alphamask)
+                xor = self.__xorCount(mask, alphamask)
+                data.append((intx, xor))
 
-        def intersection(m1, m2):
-            return cv2.countNonZero(cv2.bitwise_and(m1, m2))
-        def difference(m1, m2):
-            return cv2.countNonZero(cv2.bitwise_xor(m1, m2))
+            # we want max(intx) and then min(xor)
+            # but that's not enough
+            s = sorted(data, reverse=True, key=lambda t: (t[0]))
+            char = self.alphabet[data.index(s[0])]
+            real = 'stern'[self.asdf]
+            print(real, data[self.alphabet.index(real)], ':', char, data[self.alphabet.index(char)], '|', max(d[0] for d in data), min(d[1] for d in data))
+            self.asdf += 1
+            return char
 
-        if use_margin:
-            '''This technique uses a margin of error to find the most likely character.
-
-            The intersection will be calculated for every character in the alphabet. On
-            the other hand, the difference will only be calculated if the intersection's
-            area is within range of `mask`'s area.
+            """Compare the provided mask against all alphabetic letters to determine the best candidate.
             
-            This will generally be faster (1-2ms on a full board), as we only need to
-            traverse the list once (i.e. no sorting) and we do not calculate the difference
-            every time. The downside is that it relies on a reasonable margin of error,
-            which is dependent on features of the provided image.'''
-            lowest_diff = np.inf
-            for i, amask in enumerate(self.alphabet_masks):
-                if abs(intersection(mask, amask) - mask_count) <= self.area_margin:
-                    diff = difference(mask, amask)
-                    if diff < lowest_diff:
-                        lowest_diff = diff
-                        index = i
-            if index == None:
-                raise AssertionError(ansi.red('Could not determine the letter. Try increasing the error margin or disabling use_margin.'))
-        else:
-            '''This technique relies on built in `sort` method.
+            ---
+            ## Parameters
             
-            The intersection and difference is calculated for every character in the
-            alphabet. Instead of storing the intersection value, we store the displacement
-            from `mask`'s area to it's area. In doing so, we can copy and sort the completed
-            list by magnitude -- first by the displacement, then by the difference. As a
-            result, the first element of the list will yield the tuple of interest. We can
-            then refer to the original list to find it's index.'''
-            mask_results = list(
-                tuple((
-                    abs(intersection(mask, amask) - mask_count),
-                    difference(mask, amask)))
-                for amask in self.alphabet_masks)
-            index = mask_results.index(
-                sorted(
-                    mask_results,
-                    key=lambda t: (t[0], t[1]))[0])
+            mask : cv2.Mat
+                A single user character mask.
+                
+            use_margin : bool
+                Determines whether or not to use the error margin method. When this is True, an assertion
+                error may be raised if a candidate could not be chosen. Higher error margin values are
+                more lenient."""
+            mask_count = cv2.countNonZero(mask)
+            index = None
 
-        return self.alphabet[index]
+            if use_margin:
+                '''This technique uses a margin of error.
 
+                The intersection will be calculated for every character in the alphabet. On
+                the other hand, the difference will only be calculated if the intersection's
+                area is within range of `mask`'s area.
+                
+                This will generally be faster (1-2ms on a full board), as we only need to
+                traverse the list once (i.e. no sorting) and we do not calculate the difference
+                every time. The downside is that it relies on an arbitrary error margin that
+                can be affected by the image quality. The other technique is unaffected by this.'''
+                lowest_diff = np.inf
+                for i, amask in enumerate(self.alphabet_masks):
+                    if abs(self.__andCount(mask, amask) - mask_count) <= self.area_margin:
+                        diff = self.__xorCount(mask, amask)
+                        if diff < lowest_diff:
+                            lowest_diff = diff
+                            index = i
+                if index == None:
+                    raise AssertionError(ansi.red('Could not determine the letter. Try increasing the error margin or disabling use_margin.'))
+            else:
+                '''This technique relies on built in `sort` method.
+                
+                The intersection and difference is calculated for every character in the
+                alphabet. Instead of storing the intersection value, we store the displacement
+                from `mask`'s area to it's area. In doing so, we can copy and sort the completed
+                list by magnitude -- first by the difference, then by the displacement. As a
+                result, the first element of the list will yield the tuple of interest. We can
+                then refer to the original list to find it's index.'''
+                mask_results = list(
+                    (self.__xorCount(mask, amask),
+                        abs(self.__andCount(mask, amask) - mask_count))
+                    for amask in self.alphabet_masks)
+                s = sorted(mask_results)
+                index = mask_results.index(s[0])
+                char = self.alphabet[index]
+
+            real = 'stern'[self.asdf]
+            print(real, data[self.alphabet.index(real)][1], ':', char, data[index][1], '\t', *(d[1] for d in data))
+            self.asdf += 1
+
+            return char
+        quit()
 
     @timer
     def get_guesses(self) -> 'list[str]':
-        guesses = []
-        running_guess = ''
-        for mask in self.char_masks:
-            running_guess += self.determine_char(mask, use_margin=True)
-            if len(running_guess) == 5:
-                guesses.append(running_guess)
-                running_guess = ''
-        return guesses
+        chars = list(self.determine_char(mask, use_margin=False)
+            for mask in self.char_masks)
+
+        return list(''.join(chars[i:i+COLS])
+            for i in range(0, len(self.char_masks), COLS))
+
 
 
 if __name__ == '__main__':
-    fd = open('wordle-game-4.png', 'rb')
+    fd = open('wordle-game-2.png', 'rb')
     image_bytes = fd.read()
     fd.close()
 
     imgproc = WordleImageProcessor(image_bytes)
     guesses = imgproc.get_guesses()
-    print(guesses)
-
+    print('Guesses:', end=' "')
+    print(*guesses, sep='", "', end='"\n')
