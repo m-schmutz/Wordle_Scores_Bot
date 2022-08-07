@@ -285,42 +285,31 @@ class WordleImageProcessor:
         self.area_margin: int = area_margin
 
         self.alphabet: str = 'abcdefghijklmnopqrstuvwxyz'
-        self.alphabet_masks: list[cv2.Mat] = []
+        self.alphabet_masks: list[cv2.Mat] = list(cv2.imread(f'lib/alphabet_masks/{char}.png', cv2.IMREAD_UNCHANGED)
+            for char in self.alphabet)
+
         self.char_masks: list[cv2.Mat] = []
         self.cells_mask: cv2.Mat = None
         self.cell_contours: list[np.ndarray] = []
         self.cellsize: int = 0
 
 
-        self.asdf = 0
-
-
         # Generate a list of contours of the game-board's cells.
         _, self.cells_mask = cv2.threshold(self.grayscale, 50, 255, cv2.THRESH_BINARY) # ASSUMES DARK THEME
-        cv2.imwrite('cells_mask.png', self.cells_mask)
         contours, _ = cv2.findContours(
             image = self.cells_mask,
             mode = cv2.RETR_EXTERNAL,
             method = cv2.CHAIN_APPROX_SIMPLE)
-        # cv2.imwrite('masks_test.png', cells_mask)
-        # cv2.imwrite('contours_test.png', cv2.drawContours(self.image, self.user_contours, -1, (0,0,255)))
-        # quit()
 
         ############# TODO: Programatically find the board!!! ################
-        self.cell_contours = self.find_cells(contours)
+        self.cell_contours = self.square_cells(contours)
         ############# Assuming we have ONLY the cell contours ##############
 
-        # self.cell_contours = list(np.squeeze(c) for c in contours)
-        _, _, self.cellsize, _ = cv2.boundingRect(self.cell_contours[0])
-        alphabet_masksize = 155
-
         ### Setup letter masks
-        # Load and setup the letter comparison masks/filters.
-        self.alphabet_masks = list(cv2.imread(f'lib/alphabet_masks/{char}.png', cv2.IMREAD_UNCHANGED)
-            for char in self.alphabet)
-
         # Resize the masks to fit self's image or vice versa, if necessary
         # [Preferalbe resize interpolation methods](https://docs.opencv.org/4.x/da/d6e/tutorial_py_geometric_transformations.html)
+        _, _, self.cellsize, _ = cv2.boundingRect(self.cell_contours[0])
+        alphabet_masksize = 155
         if self.cellsize != alphabet_masksize:
             if self.cellsize < alphabet_masksize:
                 self.alphabet_masks = list(cv2.resize(m, (self.cellsize, self.cellsize), interpolation=cv2.INTER_AREA)
@@ -342,114 +331,90 @@ class WordleImageProcessor:
                 break
             self.char_masks.append(chars_mask[y:y+self.cellsize, x:x+self.cellsize])
 
-    def find_cells(self, contours):
-        square_contours: list[np.ndarray] = []
-        for contour in contours:
-            # disregard any contours that are not a quadrilateral
-            if len(contour) != 4:
-                continue
-            
-            # disregard any contour whose bounding box is not ~square
-            _, _, w, h = cv2.boundingRect(contour)
-            if abs(w - h) > 2:
-                continue
-
-            if w < 50:
-                continue
-
-            # keep all ~square contours
-            square_contours.append(np.squeeze(contour))
-
-        print(f'Keeping {len(square_contours)}...')
-        cv2.imwrite('out.png', cv2.drawContours(self.image, square_contours, -1, (0,0,255), 2))
-        return square_contours
-
-    def __andCount(self, m1, m2) -> int:
+    def countNonZeroAND(self, m1, m2) -> int:
         return int(cv2.countNonZero(cv2.bitwise_and(m1, m2)))
     
-    def __xorCount(self, m1, m2) -> int:
+    def countNonZeroXOR(self, m1, m2) -> int:
         return int(cv2.countNonZero(cv2.bitwise_xor(m1, m2)))
 
-    # Returns the character that best matches the given mask.
+    @timer
+    def square_cells(self, contours:'list[np.ndarray]'):
+        SQUARE_THRESH:int = 2   # the highest difference in width-height to permit
+        SQUARE_ARRSIZE:int = 8  # 4 pairs of x/y-coords
+        squares = list()
+        for c in contours:
+            # disregard any contours that are not a quadrilateral
+            if c.size != SQUARE_ARRSIZE:
+                continue
+
+            # disregard any contour whose bounding box is not approximately a square
+            _, _, w, h = cv2.boundingRect(c)
+            if abs(w - h) > SQUARE_THRESH:
+                continue
+
+            squares.append(c)
+        return np.squeeze(squares)
+
     def determine_char(self, mask: cv2.Mat, use_margin: bool = False) -> str:
-        if self.asdf in range(5):
-            data = []
-            for alphamask in self.alphabet_masks:
-                intx = self.__andCount(mask, alphamask)
-                xor = self.__xorCount(mask, alphamask)
-                data.append((intx, xor))
-
-            # we want max(intx) and then min(xor)
-            # but that's not enough
-            s = sorted(data, reverse=True, key=lambda t: (t[0]))
-            char = self.alphabet[data.index(s[0])]
-            real = 'stern'[self.asdf]
-            print(real, data[self.alphabet.index(real)], ':', char, data[self.alphabet.index(char)], '|', max(d[0] for d in data), min(d[1] for d in data))
-            self.asdf += 1
-            return char
-
-            """Compare the provided mask against all alphabetic letters to determine the best candidate.
+        """Compare the provided mask against all alphabetic letters to determine the best candidate.
+        
+        ---
+        ## Parameters
+        
+        mask : cv2.Mat
+            A single user character mask.
             
-            ---
-            ## Parameters
+        use_margin : bool
+            Determines whether or not to use the error margin method. When this is True, an assertion
+            error may be raised if a candidate could not be chosen. Higher error margin values are
+            more lenient."""
+        mask_count = cv2.countNonZero(mask)
+        index = None
+
+        if use_margin:
+            '''This technique uses a margin of error.
+
+            The intersection will be calculated for every character in the alphabet. On
+            the other hand, the difference will only be calculated if the intersection's
+            area is within range of `mask`'s area.
             
-            mask : cv2.Mat
-                A single user character mask.
-                
-            use_margin : bool
-                Determines whether or not to use the error margin method. When this is True, an assertion
-                error may be raised if a candidate could not be chosen. Higher error margin values are
-                more lenient."""
-            mask_count = cv2.countNonZero(mask)
-            index = None
+            This will generally be faster (1-2ms on a full board), as we only need to
+            traverse the list once (i.e. no sorting) and we do not calculate the difference
+            every time. The downside is that it relies on an arbitrary error margin that
+            can be affected by the image quality. The other technique is unaffected by this.'''
+            lowest_diff = np.inf
+            for i, amask in enumerate(self.alphabet_masks):
+                if abs(self.countNonZeroAND(mask, amask) - mask_count) <= self.area_margin:
+                    diff = self.countNonZeroXOR(mask, amask)
+                    if diff < lowest_diff:
+                        lowest_diff = diff
+                        index = i
+            if index == None:
+                raise AssertionError(ansi.red('Could not determine the letter. Try increasing the error margin or disabling use_margin.'))
+        else:
+            '''This technique relies on built in `sort` method.
+            
+            The intersection and difference is calculated for every character in the
+            alphabet. Instead of storing the intersection value, we store the displacement
+            from `mask`'s area to it's area. In doing so, we can copy and sort the completed
+            list by magnitude -- first by the difference, then by the displacement. As a
+            result, the first element of the list will yield the tuple of interest. We can
+            then refer to the original list to find it's index.'''
+            mask_results = list(
+                (self.countNonZeroXOR(mask, amask),
+                    abs(self.countNonZeroAND(mask, amask) - mask_count))
+                # (abs(self.__andCount(mask, amask) - mask_count),
+                #     self.__xorCount(mask, amask))
+                for amask in self.alphabet_masks)
+            s = sorted(mask_results)
+            index = mask_results.index(s[0])
+            char = self.alphabet[index]
 
-            if use_margin:
-                '''This technique uses a margin of error.
-
-                The intersection will be calculated for every character in the alphabet. On
-                the other hand, the difference will only be calculated if the intersection's
-                area is within range of `mask`'s area.
-                
-                This will generally be faster (1-2ms on a full board), as we only need to
-                traverse the list once (i.e. no sorting) and we do not calculate the difference
-                every time. The downside is that it relies on an arbitrary error margin that
-                can be affected by the image quality. The other technique is unaffected by this.'''
-                lowest_diff = np.inf
-                for i, amask in enumerate(self.alphabet_masks):
-                    if abs(self.__andCount(mask, amask) - mask_count) <= self.area_margin:
-                        diff = self.__xorCount(mask, amask)
-                        if diff < lowest_diff:
-                            lowest_diff = diff
-                            index = i
-                if index == None:
-                    raise AssertionError(ansi.red('Could not determine the letter. Try increasing the error margin or disabling use_margin.'))
-            else:
-                '''This technique relies on built in `sort` method.
-                
-                The intersection and difference is calculated for every character in the
-                alphabet. Instead of storing the intersection value, we store the displacement
-                from `mask`'s area to it's area. In doing so, we can copy and sort the completed
-                list by magnitude -- first by the difference, then by the displacement. As a
-                result, the first element of the list will yield the tuple of interest. We can
-                then refer to the original list to find it's index.'''
-                mask_results = list(
-                    (self.__xorCount(mask, amask),
-                        abs(self.__andCount(mask, amask) - mask_count))
-                    for amask in self.alphabet_masks)
-                s = sorted(mask_results)
-                index = mask_results.index(s[0])
-                char = self.alphabet[index]
-
-            real = 'stern'[self.asdf]
-            print(real, data[self.alphabet.index(real)][1], ':', char, data[index][1], '\t', *(d[1] for d in data))
-            self.asdf += 1
-
-            return char
-        quit()
+        return char
 
     @timer
     def get_guesses(self) -> 'list[str]':
-        chars = list(self.determine_char(mask, use_margin=False)
+        chars = list(self.determine_char(mask)
             for mask in self.char_masks)
 
         return list(''.join(chars[i:i+COLS])
@@ -458,11 +423,20 @@ class WordleImageProcessor:
 
 
 if __name__ == '__main__':
-    fd = open('wordle-game-2.png', 'rb')
+    fd = open('wordle-game-1.png', 'rb')
     image_bytes = fd.read()
     fd.close()
-
     imgproc = WordleImageProcessor(image_bytes)
     guesses = imgproc.get_guesses()
     print('Guesses:', end=' "')
     print(*guesses, sep='", "', end='"\n')
+
+    # # Create alphabet masks without padding.
+    # for a,m in zip(imgproc.alphabet, imgproc.alphabet_masks):
+    #     #should only be one contour
+    #     contours, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    #     x,y,w,h = cv2.boundingRect(contours[0])
+    #     print('w=',w,'h=',h)
+
+    #     slce = m[y:y+h,x:x+w]
+    #     cv2.imwrite(f'lib/alphabet_masks_new/{a}.png', slce)
