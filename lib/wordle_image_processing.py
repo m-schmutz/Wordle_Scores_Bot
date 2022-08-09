@@ -302,7 +302,7 @@ class WordleImageProcessor:
             method = cv2.CHAIN_APPROX_SIMPLE)
 
         ############# TODO: Programatically find the board!!! ################
-        self.cell_contours = self.square_cells(contours)
+        self.cell_contours = self.get_square_cells(contours)
         ############# Assuming we have ONLY the cell contours ##############
 
         ### Setup letter masks
@@ -338,7 +338,7 @@ class WordleImageProcessor:
         return int(cv2.countNonZero(cv2.bitwise_xor(m1, m2)))
 
     @timer
-    def square_cells(self, contours:'list[np.ndarray]'):
+    def get_square_cells(self, contours:'list[np.ndarray]'):
         SQUARE_THRESH:int = 2   # the highest difference in width-height to permit
         SQUARE_ARRSIZE:int = 8  # 4 pairs of x/y-coords
         squares = list()
