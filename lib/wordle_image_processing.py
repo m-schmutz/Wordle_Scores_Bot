@@ -25,12 +25,11 @@ PSM_SPARSE_OSD      = 12    # "Sparse text with OSD."
 PSM_RAW_LINE        = 13    # "Raw line. Treat the image as a single text line, bypassing hacks that are Tesseract-specific."
 
 ALPHABET = 'abcdefghijklmnopqrstuvwxyz'
-CONFIG = f'--oem {OEM_DEFAULT} --psm {PSM_SINGLE_LINE} -c tessedit_char_whitelist={ALPHABET.upper()}'
+CONFIG = f'--oem {OEM_DEFAULT} --psm {PSM_SINGLE_BLOCK} -c tessedit_char_whitelist={ALPHABET.upper()}'
 
 COLS = 5    # i.e. number of characters per word
 SQUARE_THRESH = 2   # the highest permissible difference between the width and height of a cell contour
-SQUARE_ARRSIZE = 8  # 4 pairs of x/y-coords
-
+SQUARE_NPSIZE = 8  # 4 pairs of x/y-coords
 
 
 # decorator function for timing purposes
@@ -45,68 +44,97 @@ def timer(func):
 
 
 class WordleImageProcessor:
-    def __init__(self, image: bytes, *, area_margin: int = 50) -> None:
-        self.image: cv2.Mat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
-        self.grayscale: cv2.Mat = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+    def __init__(self, image: bytes) -> None:
+        self.image = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+        self.grayscale = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+        self.darkTheme = np.median(self.grayscale[0:1,:]) < 200
 
-        ######## TODO
-        ######## Determine if light or dark theme is being used in order to apply correct thresholds
-        _, self.cells_mask = cv2.threshold(self.grayscale, 50, 255, cv2.THRESH_BINARY) # ASSUMES DARK THEME
-        ######## TODO
-        ######## Programatically find the board and keep only cell contours
-        self.cell_contours: list[np.ndarray] = self.genCellContours()
-        
-        ######## TODO
-        ######## 
-        self.chars_mask: cv2.Mat = self.genCharMask()
+        self.cell_mask = self._genCellMask()
+        self.cell_contours = self._genCellContours()
+        self.chars_mask = self._genCharMask()
 
-    @timer
-    def genCharMask(self) -> cv2.Mat:
-        cols = []
-        _, mask = cv2.threshold(self.grayscale, 200, 255, cv2.THRESH_BINARY_INV) # ASSUMES DARK THEME
-        for i in range(COLS):
-            x,_,w,_ = cv2.boundingRect(self.cell_contours[i])
-            off = w//4
-            cols.insert(0, mask[:, x+off:x+w-off])
-        mask = cv2.hconcat(cols)
+    def _genCellMask(self, save: bool = False) -> cv2.Mat:
+        if self.darkTheme:
+            thresh = 30
+            mode = cv2.THRESH_BINARY
+        else:
+            thresh = 200
+            mode = cv2.THRESH_BINARY_INV
 
-        # cv2.imwrite('chars_mask.png', self.chars_mask)
+        _, mask = cv2.threshold(self.grayscale, thresh, 255, mode)
+
+        if save:
+            cv2.imwrite('tests/cell_mask.png', mask)
+
         return mask
 
-    @timer
-    def genCellContours(self) -> 'list[np.ndarray]':
-        filtered = list()
-        contours, _ = cv2.findContours(self.cells_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    def _genCharMask(self, save: bool = False) -> cv2.Mat:
+        _, mask = cv2.threshold(self.grayscale, 200, 255, cv2.THRESH_BINARY_INV)
 
-        for c in contours:
-            # disregard any contours that are not a quadrilateral
-            if c.size != SQUARE_ARRSIZE:
+        # squeeze letters horizontally
+        cols = list()
+        for c in self.cell_contours[:COLS]:
+            x,_,w,_ = cv2.boundingRect(c)
+            off = w//4
+            cols.append(mask[:, x+off:x+w-off])
+        mask = cv2.hconcat(cols)
+
+        # crop vertically
+        ys = list(y for contour in self.cell_contours
+            for (_, y) in contour)
+        mask = mask[min(ys):max(ys), :]
+
+        # potentially fill empty horizontal strips
+        if not self.darkTheme:
+            for i in range(mask.shape[0]):
+                if all(mask[i,:] == 0):
+                    mask[i,:] = 255
+
+        if save:
+            cv2.imwrite('tests/chars_mask.png', mask)
+
+        return mask
+
+    def _genCellContours(self, save: bool = False) -> 'list[np.ndarray]':
+        filtered = list()
+        contours, _ = cv2.findContours(self.cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # rule out as many contours as possible
+        for c in reversed(contours):
+            # not a quadrilateral
+            if c.size != SQUARE_NPSIZE:
                 continue
 
-            # disregard any contour whose bounding box is not approximately a square
+            # not approximately a square
             x, y, w, h = cv2.boundingRect(c)
             if abs(w - h) > SQUARE_THRESH:
                 continue
             
-            if not self.cells_mask[y+h//2, x+w//2]:
-                continue
+            # empty cells
+            if np.median(self.cell_mask[y:y+h,x:x+w]) == 0:
+                break
 
             filtered.append(c)
+
+        if save:
+            cv2.imwrite('tests/cell_contours.png', cv2.drawContours(self.image, filtered, -1, (0,0,255)))
+
         return np.squeeze(filtered)
 
-    @timer
-    def getWords(self):
-        text = image_to_string(self.chars_mask, lang="eng", config=f'--psm {PSM_SINGLE_BLOCK} -c tessedit_char_whitelist={ALPHABET.upper()}').strip()
-        return text.split('\n')
+    def getWords(self) -> 'list[str]':
+        text = image_to_string(self.chars_mask, lang="eng", config=CONFIG)
+        return text.strip().split('\n')
 
 
 @timer
 def main():
-    fd = open('wordle-game-7.png', 'rb')
+    fd = open(f'wordle-game-dark2.png', 'rb')
     image_bytes = fd.read()
     fd.close()
-    imgproc = WordleImageProcessor(image_bytes)
-    print(imgproc.getWords())
+
+    wip = WordleImageProcessor(image_bytes)
+    words = wip.getWords()
+    print(words)
 
 if __name__ == '__main__':
     main()
