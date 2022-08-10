@@ -81,6 +81,8 @@ class GroupStats:
 
 class DoubleSubmit(Exception):
     '''Exception raised if user attempts to submit twice on the same day'''
+    def __str__(self):
+        return 'User has already submitted today'
 
 class BotDatabase:
     '''
