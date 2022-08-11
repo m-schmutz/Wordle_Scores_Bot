@@ -1,4 +1,3 @@
-from dis import disco
 from typing import Union, Callable
 import discord
 import random
@@ -30,6 +29,7 @@ class ChimpView(discord.ui.View):
         # Declaring the type allows the interpreter to infer information. This is left
         # uninitialized because the discord package disallows setting this attribute.
         self.children: list[ChimpButton]
+        self.randomizeBoard()
 
     # Determines the next course of action based on a user's button press.
     def _processButtonPress(self, interaction: discord.Interaction) -> None:

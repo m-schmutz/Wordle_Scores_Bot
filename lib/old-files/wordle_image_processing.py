@@ -47,7 +47,7 @@ class WordleImageProcessor:
     def __init__(self, image: bytes) -> None:
         self.image = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
         self.grayscale = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
-        self.darkTheme = np.median(self.grayscale[0:1,:]) < 200
+        self.darkTheme = np.median(self.grayscale[:1,:]) < 200
 
         self.cell_mask = self._genCellMask()
         self.cell_contours = self._genCellContours()
@@ -67,6 +67,19 @@ class WordleImageProcessor:
             cv2.imwrite('tests/cell_mask.png', mask)
 
         return mask
+
+    def _genCellContours(self, save: bool = False) -> 'list[np.ndarray]':
+        contours, _ = cv2.findContours(self.cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Remove all axis of length one since they are useless. Additionally, reverse
+        # the list since cv2.findContours works from SE to NW and we want our contours
+        # organized from NW to SE (i.e. guess order).
+        contours = np.squeeze(contours)[::-1]
+
+        if save:
+            cv2.imwrite('tests/cell_contours.png', cv2.drawContours(self.image, contours, -1, (0,0,255)))
+
+        return contours
 
     def _genCharMask(self, save: bool = False) -> cv2.Mat:
         _, mask = cv2.threshold(self.grayscale, 200, 255, cv2.THRESH_BINARY_INV)
@@ -95,32 +108,6 @@ class WordleImageProcessor:
 
         return mask
 
-    def _genCellContours(self, save: bool = False) -> 'list[np.ndarray]':
-        filtered = list()
-        contours, _ = cv2.findContours(self.cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        # rule out as many contours as possible
-        for c in reversed(contours):
-            # not a quadrilateral
-            if c.size != SQUARE_NPSIZE:
-                continue
-
-            # not approximately a square
-            x, y, w, h = cv2.boundingRect(c)
-            if abs(w - h) > SQUARE_THRESH:
-                continue
-            
-            # empty cells
-            if np.median(self.cell_mask[y:y+h,x:x+w]) == 0:
-                break
-
-            filtered.append(c)
-
-        if save:
-            cv2.imwrite('tests/cell_contours.png', cv2.drawContours(self.image, filtered, -1, (0,0,255)))
-
-        return np.squeeze(filtered)
-
     def getWords(self) -> 'list[str]':
         text = image_to_string(self.chars_mask, lang="eng", config=CONFIG)
         return text.strip().split('\n')
@@ -128,7 +115,7 @@ class WordleImageProcessor:
 
 @timer
 def main():
-    fd = open(f'wordle-game-dark2.png', 'rb')
+    fd = open(f'wordle-game-light5.png', 'rb')
     image_bytes = fd.read()
     fd.close()
 
