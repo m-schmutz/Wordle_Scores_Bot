@@ -1,8 +1,11 @@
 import sqlite3 as sql
 from datetime import datetime
-from os import path, remove
+from os import path
 
 LTRS_IN_GUESS = 5
+
+# set DEBUG to True if you want to ignore double submits
+DEBUG = False
 
 def date_to_int():
     return int(datetime.now().date().isoformat().replace('-', ''))
@@ -10,6 +13,21 @@ def date_to_int():
 class UserStats:
     '''
     Object to contain user stats returned from the database
+
+    ---
+    #### Members
+    - attempts 
+    - solves
+    - guesses
+    - greens
+    - yellows
+    - curr_streak
+    - max_streak
+    - total_letters
+    - avg_guesses
+    - green_rate
+    - yellow_rate
+
     '''
     def __init__(self, __raw:tuple):
         _, attempts, solves, guesses, greens, yellows, curr_streak, max_streak, last_solve = __raw
@@ -48,6 +66,18 @@ class UserStats:
 class GroupStats:
     '''
     Object to contain group stats returned from the database
+
+    ---
+    #### Members
+    - attempts
+    - solves
+    - guesses
+    - greens
+    - yellows
+    - total_letters
+    - avg_guesses
+    - green_rate
+    - yellow_rate
     '''
     def __init__(self, __raw:tuple):
         attempts, solves, guesses, greens, yellows = __raw
@@ -80,10 +110,19 @@ class GroupStats:
         '''
 
 class DoubleSubmit(Exception):
-    __module__ = Exception.__module__
     '''Exception raised if user attempts to submit twice on the same day'''
+    
+    # takes in username to print out whihc user is attempting to submit twice 
+    def __init__(self, username) -> None:
+        self.username = username    
+
+    # set __module__ to exception module (nice print out message)
+    ## this can be taken out later
+    __module__ = Exception.__module__
+    
+    # print string including username of user that has attempted to submit twice
     def __str__(self):
-        return 'User has already submitted today'
+        return f'{self.username} has already submitted today'
 
 class BotDatabase:
     '''
@@ -107,14 +146,14 @@ class BotDatabase:
         # initialize dictionary to contain users and their last submission date
         self._users = dict()
 
-        # if the database did not previously exist, initialize a new one
+        # initialize cursor
+        _cur = self._database.cursor()
+
+        # if the database did not previously exist, initialize the new one
         if not exists:
 
-            # initialize cursor
-            __cur = self._database.cursor()
-
             # execute sql script to initialize the sqlite database
-            __cur.executescript('''
+            _cur.executescript('''
 
             CREATE TABLE User_Data (
                 username varchar(32), 
@@ -126,6 +165,7 @@ class BotDatabase:
                 curr_streak int, 
                 max_streak int, 
                 last_solve int, 
+                last_submit int,
                 PRIMARY KEY (username)
                 ); 
 
@@ -159,10 +199,24 @@ class BotDatabase:
                 );''')
             
             # close the cursor
-            __cur.close()
+            _cur.close()
+
+        # if the database does exist, load data 
+        else:
+
+            # get usernames and their last submits
+            _existing = _cur.execute(f"SELECT username, last_submit from User_Data").fetchall()
+            
+            # load data into the _users
+            for (username, last_submit) in _existing:
+                self._users[username] = last_submit
 
         # commit the changes to the database
         self._database.commit()
+
+    def __del__(self) -> None:
+        # close connection to database
+        self._database.close()
 
     def get_user_stats(self, username:str):
         '''
@@ -170,16 +224,16 @@ class BotDatabase:
         Stats returned: 
         '''
         # initialize cursor
-        __cur = self._database.cursor()
+        _cur = self._database.cursor()
 
         # get user data from the database
-        __raw = __cur.execute(f'''SELECT * FROM User_Data WHERE username = '{username}';''').fetchone()
+        _raw = _cur.execute(f'''SELECT * FROM User_Data WHERE username = '{username}';''').fetchone()
         
         # close the cursor
-        __cur.close()
+        _cur.close()
 
         # initialize UserStats object with values from database
-        user_stats = UserStats(__raw)
+        user_stats = UserStats(_raw)
 
         # return UserStats object
         return user_stats
@@ -187,75 +241,76 @@ class BotDatabase:
     def get_group_stats(self):
 
         # initialize cursor
-        __cur = self._database.cursor()
+        _cur = self._database.cursor()
 
         # get group data from the database
-        __raw = __cur.execute('SELECT * FROM Group_Data').fetchone()
+        _raw = _cur.execute('SELECT * FROM Group_Data').fetchone()
         
         # close cursor
-        __cur.close()
+        _cur.close()
 
         # initialize GroupStats object with values from database
-        group_stats = GroupStats(__raw)
+        group_stats = GroupStats(_raw)
 
         # return the GroupData object
         return group_stats
 
-    def _get_update_values(self, solved:int, __last_solve:int, date:int):
+    def _get_update_values(self, solved:int, _last_solve:int, date:int):
         # increase solves if user solved the wordle; otherwise solves stays the same
-        __solves_update = 'solves + 1' if solved else 'solves'
+        _solves_update = 'solves + 1' if solved else 'solves'
 
         # increment streak if user has solved consecutively; otherwise streak will not be incremented
-        __continue_streak = (date - __last_solve) == 1 
+        _continue_streak = (date - _last_solve) == 1 
 
         # last solve is set to current date if wordle solved; otherwise last solve stays the same
-        __last_solve_update = date if solved else __last_solve
+        _last_solve_update = date if solved else _last_solve
 
         # increment streak 
-        if solved and __continue_streak:
-            __streak_update = 'curr_streak + 1'
+        if solved and _continue_streak:
+            _streak_update = 'curr_streak + 1'
         
         # set streak to 1 if this is the start of a new streak
         elif solved:
-            __streak_update = '1'
+            _streak_update = '1'
 
         # set streka to 0 if user did not solve wordle today
         else:
-            __streak_update = '0'
+            _streak_update = '0'
 
         # return computed values
-        return __solves_update, __streak_update, __last_solve_update
+        return _solves_update, _streak_update, _last_solve_update
 
     def _update_user(self, username:str, solved:bool, guesses:int, greens:int, yellows:int, date:int):
 
         # initialize cursor
-        __cur = self._database.cursor()
+        _cur = self._database.cursor()
 
         # get the last solve date for this user
-        __last_solve, = __cur.execute(f"SELECT last_solve FROM User_Data WHERE username = '{username}';").fetchone()
+        _last_solve, = _cur.execute(f"SELECT last_solve FROM User_Data WHERE username = '{username}';").fetchone()
 
         # get the update values for the database
-        __solves_update, __streak_update, __last_solve_update = self._get_update_values(solved, __last_solve, date)
+        _solves_update, _streak_update, _last_solve_update = self._get_update_values(solved, _last_solve, date)
         
         # execute sql script to update data in database for this user
-        __cur.executescript(f'''
+        _cur.executescript(f'''
             UPDATE User_Data SET attempts = attempts + 1 WHERE username = '{username}';
-            UPDATE User_Data SET solves = {__solves_update} WHERE username = '{username}';
+            UPDATE User_Data SET solves = {_solves_update} WHERE username = '{username}';
             UPDATE User_Data SET guesses = guesses + {guesses} WHERE username = '{username}';
-            UPDATE User_Data SET greens = greens = greens + {greens} WHERE username = '{username}';
+            UPDATE User_Data SET greens = greens + {greens} WHERE username = '{username}';
             UPDATE User_Data SET yellows = yellows + {yellows} WHERE username = '{username}';
-            UPDATE User_Data SET curr_streak = {__streak_update} WHERE username = '{username}';
-            UPDATE User_Data SET last_solve = {__last_solve_update} WHERE username = '{username}'; 
+            UPDATE User_Data SET curr_streak = {_streak_update} WHERE username = '{username}';
+            UPDATE User_Data SET last_solve = {_last_solve_update} WHERE username = '{username}'; 
+            UPDATE User_Data SET last_submit = {date} WHERE username = '{username}';
 
             UPDATE Group_Data SET attempts = attempts + 1;
-            UPDATE Group_Data SET solves = {__solves_update};
+            UPDATE Group_Data SET solves = {_solves_update};
             UPDATE Group_Data SET guesses = guesses + {guesses};
             UPDATE Group_Data SET greens = greens + {greens};
             UPDATE Group_Data SET yellows = yellows + {yellows};
         ''')
 
         # close cursor
-        __cur.close()
+        _cur.close()
 
         # commit changes to the database
         self._database.commit()
@@ -285,7 +340,8 @@ class BotDatabase:
                 yellows, 
                 curr_streak, 
                 max_streak, 
-                last_solve)
+                last_solve,
+                last_submit)
                 Values (
                     '{username}', 
                     {__attempts_insert}, 
@@ -295,7 +351,8 @@ class BotDatabase:
                     {yellows}, 
                     {__streak_insert}, 
                     {__streak_insert}, 
-                    {__date_insert});
+                    {__date_insert},
+                    {date});
 
             UPDATE Group_Data SET attempts = attempts + 1;
             UPDATE Group_Data SET solves = solves + {__solves_insert};
@@ -321,13 +378,13 @@ class BotDatabase:
         if username in self._users:
 
             # get the date of their last submission 
-            __last_submit = self._users[username]
+            _last_submit = self._users[username]
 
             # check if this user has already submitted this day
-            if __last_submit == date:
+            if _last_submit == date and not DEBUG:
                 
                 # raise DoubleSubmit exception
-                raise DoubleSubmit('already submitted today')
+                raise DoubleSubmit(username)
 
             # if we get here, this is a new submission for today. Update database
             self._update_user(username, solved, guesses, greens, yellows, date)
