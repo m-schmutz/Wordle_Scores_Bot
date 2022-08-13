@@ -367,7 +367,7 @@ class BotDatabase:
         # commit the changes to the database
         self._database.commit()
 
-    def submit_data(self, username:str, solved:bool, guesses:int, greens:int, yellows:int):
+    def submit_data(self, username:str, solved:bool, guesses:int, greens:int, yellows:int, dtime:datetime):
         '''Given the username and info on attempt, user stats are updated in the database. A user is added to the database if
         they are a new user. Method will raise DoubleSubmit exception if method is called on the same user twice or more on one day'''
 

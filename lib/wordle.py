@@ -12,8 +12,7 @@ from random import choice, randint
 from chimp import ChimpView
 from enum import Enum, auto
 from collections import Counter
-
-MSG_DEL = '*<deleted {0}\'s message>*\n{1}'
+from database import BotDatabase, DoubleSubmit
 
 # decorator function for timing purposes
 def timer(func):
@@ -25,7 +24,8 @@ def timer(func):
         return ret
     return _inner
 
-class WebScraper:
+PREV_PATH = './lib/prev.wotd'
+class _WebScraper:
     """Keeps track of the Word of the Day. Uses Selenium to scrape the NYTimes Wordle webpage.
     
     ---
@@ -54,34 +54,37 @@ class WebScraper:
         self._driver.get('https://www.nytimes.com/games/wordle/index.html')
         return str(self._driver.execute_script('return JSON.parse(this.localStorage.getItem("nyt-wordle-state")).solution'))
 
-    def wotd(self) -> str:
+    def wotd(self, subDate: datetime) -> str:
         """Returns today's word."""
 
-        now = datetime.now().date()
-        if self._last_updated < now:
-            self._last_updated = now
+        # Potentially update today's word
+        today = datetime.now().date()
+        if self._last_updated < today:
+            prev_wotd = self._wotd
             self._wotd = self._scrape()
+            self._last_updated = today
+
+            # If we updated the word as user submit, return the previous word
+            if subDate < today:
+                return prev_wotd
 
         return self._wotd
 
-class ImageProcessor:
+class _ImageProcessor:
     """Reads an image of a users Wordle game to obtain their guesses.
         
     ---
     ## Methods
     
-    getGuesses() -> list[str]
+    getGuesses(image: bytes) -> list[str]
         Returns a list of the user's guesses."""
 
-    def __init__(self, image: bytes) -> None:
-        self._image = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
-        self._grayscale = cv2.cvtColor(self._image, cv2.COLOR_BGR2GRAY)
-        self._darkTheme = np.median(self._grayscale[:1,:]) < 200
-        self._cell_mask = self._genCellMask()
-        self._cell_contours = self._genCellContours()
-        self._chars_mask = self._genCharMask()
-
-        self.guesses: list[str] = self._getGuesses()
+    def __init__(self) -> None:
+        self._grayscale = None
+        self._darkTheme = None
+        self._cell_mask = None
+        self._cell_contours = None
+        self._chars_mask = None
 
     def _genCellMask(self) -> cv2.Mat:
         if self._darkTheme:
@@ -141,59 +144,54 @@ class ImageProcessor:
 
         return mask
 
-    def _getGuesses(self) -> 'list[str]':
+    def _tesseract(self) -> 'list[str]':
         """Use Tesseract to convert a mask of the user's guesses into a list of strings."""
 
         text:str = image_to_string(self._chars_mask, lang="eng", config='--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ')
         return text.lower().strip().split('\n')
 
-class CharScore(Enum):
+    def getGuesses(self, image: bytes) -> 'list[str]':
+        self._grayscale = cv2.cvtColor(
+            src = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR),
+            code = cv2.COLOR_BGR2GRAY)
+        self._darkTheme = (np.median(self._grayscale[:1,:]) < 200)
+        self._cell_mask = self._genCellMask()
+        self._cell_contours = self._genCellContours()
+        self._chars_mask = self._genCharMask()
+
+        guesses = self._tesseract()
+        self.__init__()
+        return guesses
+
+class _CharScore(Enum):
     CORRECT = auto()
     MISPLACED = auto()
     INCORRECT = auto()
 
-    def __str__(self):
+    def __repr__(self) -> str:
         return self.name
 
-class GameScorer:
-    def __init__(self, image: bytes) -> None:
-        self.ip = ImageProcessor(image)
-        self.scraper = WebScraper()
+class _GameAnalyzer:
+    # Assigns each character a _CharScore.
+    def scoreGame(self, guesses: 'list[str]', wotd: str) -> 'tuple[bool, int, int, int]':
+        self.numGuesses = len(guesses)
+        self.numGreen = 0
+        self.numYellow = 0
 
-        self.numGuesses = len(self.ip.guesses)
-        self.scores = self._scoreGame()
-        self.won = all(s == CharScore.CORRECT for s in self.scores[-1])
-
-    # Returns the character, colored based on it's score.
-    def _colorByScore(self, char, score) -> ansi.sgr:
-        if score == CharScore.CORRECT:
-            return ansi.green(char)
-
-        if score == CharScore.MISPLACED:
-            return ansi.yellow(char)
-
-        if score == CharScore.INCORRECT:
-            return ansi.rgb(char, r=150, g=150, b=150)
-
-        # Invalid Character Score!
-        print(f'Invalid score type <{score}>. Returning original character.')
-        return char
-
-    # Assigns each character a CharScore.
-    def _scoreGame(self) -> 'list[list[CharScore]]':
-        # Score each guess
-        wotd = self.scraper.wotd()
         wotd_char_counts = Counter(wotd)
         results = []
-        for guess in self.ip.guesses:
-            scores = [CharScore.INCORRECT] * 5
-            remaining = []
+
+        # Score each guess
+        for guess in guesses:
+            scores = [_CharScore.INCORRECT] * 5
+            remaining = list()
 
             # Mark all correct characters
-            for i, (gchar, wchar) in enumerate(zip(guess, wotd)):
+            for i, gchar, wchar in zip(range(5), guess, wotd):
                 if gchar == wchar:
                     wotd_char_counts[wchar] -= 1
-                    scores[i] = CharScore.CORRECT
+                    scores[i] = _CharScore.CORRECT
+                    self.numGreen += 1
                 else:
                     remaining.append(i)
 
@@ -201,111 +199,129 @@ class GameScorer:
             for index in remaining:
                 gchar = guess[index]
                 wchar = wotd[index]
-                if gchar in wotd:
-                    if wotd_char_counts[gchar] > 0:
-                        wotd_char_counts[gchar] -= 1
-                        scores[index] = CharScore.MISPLACED
-            
+                if gchar in wotd and wotd_char_counts[gchar] > 0:
+                    wotd_char_counts[gchar] -= 1
+                    scores[index] = _CharScore.MISPLACED
+                    self.numYellow += 1
+
             results.append(scores)
-        return results
+
+        self.won = all(s == _CharScore.CORRECT
+            for s in results[-1])
+
+        return (self.won, self.numGuesses, self.numGreen, self.numYellow)
 
     # Returns a list of colored guesses according to the Wordle scheme.
     def _pretty(self) -> 'list[str]':
         # For each guess...
         pretty = []
-        for guess, scores in zip(self.ip.guesses, self.scores):
+        for guess, scores in zip(self._ip.guesses, self.scores):
             # For each character in the guess...
             str_score = ''
             for char, score in zip(guess, scores):
-                str_score += str(self._colorByScore(char, score))
+                if score == _CharScore.CORRECT:
+                    str_score += ansi.green(char)
+                elif score == _CharScore.MISPLACED:
+                    str_score += ansi.yellow(char)
+                elif score == _CharScore.INCORRECT:
+                    str_score += ansi.rgb(char, r=150, g=150, b=150)
+                else:
+                    print(f'Invalid score type <{score}>. Returning original character.')
             pretty.append(str_score)
         return pretty
 
 class Bot:
     def __init__(self, token: str, id: int) -> None:
-        self.token = token
-        self.guild = discord.Object(id=id)
-        self.synced = False
-        self.bot = commands.Bot(
-            command_prefix='!',
-            intents=discord.Intents.all(),
-            help_command=None)
-        
+        self._token = token
+        self._guild = discord.Object(id=id)
+        self._synced = False
+        self._scraper = _WebScraper()
+        self._ip = _ImageProcessor()
+        self._ga = _GameAnalyzer()
+        self._db = BotDatabase(db_path='./lib/stats._db')
+        self._bot = commands.Bot(
+            command_prefix = '!',
+            intents = discord.Intents.all(),
+            help_command = None)
+
         ### Discord Bot Events
-        @self.bot.event
+        @self._bot.event
         async def on_ready():
-            await self.bot.wait_until_ready()
-            if not self.synced:
-                await self.bot.tree.sync(guild=self.guild)
-                self.synced = True
+            await self._bot.wait_until_ready()
+            if not self._synced:
+                await self._bot.tree.sync(guild=self._guild)
+                self._synced = True
 
-            print(f'\'{self.bot.user}\' logged in and ready!')
-
-        @self.bot.event
-        async def on_message(message: discord.Message):
-            if message.author.bot:
-                return
-
-            if message.attachments:
-                # Restrict attachments to one per message
-                if len(message.attachments) > 1:
-                    await message.delete()
-                    await message.channel.send(MSG_DEL.format(message.author.name, 'One at a time please!'))
-                    return
-
-                # Only allow if it's tagged with spoiler
-                user_attachment = message.attachments[0]
-                if not user_attachment.is_spoiler():
-                    await message.delete()
-                    await message.channel.send(MSG_DEL.format(message.author.name, 'Please mark your image as spoiler 😎'))
-                    return
-
-                # Capture the game
-                img = await user_attachment.read()
-                game = GameScorer(image=img)
-                resp = self._getResponse(game)
-                await message.channel.send(resp)
-                return
-
-            # Remind the discord.ext.commands.Bot to parse the message for commands
-            await self.bot.process_commands(message)
+            print(f'\'{self._bot.user}\' logged in and ready!')
 
         ### Discord Bot Application Commands
-        @self.bot.tree.command(name='chimp', description='Are you smarter than a chimp? Play this quick memorization game to find out!', guild=self.guild)
+        @self._bot.tree.command(name= 'submit',
+            description= 'Submit a screenshot of your Wordle game!',
+            guild= self._guild)
+        async def _(interaction: discord.Interaction, image: discord.Attachment):
+
+            # Defer the response. Processing the game may take longer than 3 seconds.
+            await interaction.response.defer(ephemeral=True, thinking=True)
+
+            # Get data
+            subDate = interaction.created_at.astimezone().date() # submission date
+            wotd = self._scraper.wotd(subDate)
+            guesses = self._ip.getGuesses(await image.read())
+            results = self._ga.scoreGame(guesses, wotd)
+
+            # Send to database and reply
+            try:
+                self._db.submit_data(str(interaction.user), *results, subDate)
+            except DoubleSubmit:
+                await interaction.followup.send(
+                    content= 'You already submit today\'s game :)',
+                    ephemeral= True)
+            else:
+                await interaction.followup.send(
+                    file= await image.to_file(spoiler=True),
+                    content= f'{interaction.user.mention}\'s submission:')
+                await interaction.followup.send(
+                    content= self._getResponse(*results),
+                    ephemeral= True)
+
+        @self._bot.tree.command(name= 'chimp',
+            description= 'Are you smarter than a chimp? Play this quick memorization game to find out!',
+            guild= self._guild)
         async def _(interaction: discord.Interaction):
             chimp = ChimpView()
             await interaction.response.send_message(view=chimp)
 
-        @self.bot.tree.command(name='link', description='Get the link to the Wordle webpage.', guild=self.guild)
+        @self._bot.tree.command(name= 'link',
+            description= 'Get the link to the Wordle webpage.',
+            guild= self._guild)
         async def _(interaction: discord.Interaction):
-            await interaction.response.send_message(view=self._genLinkView(), ephemeral=True)
+            await interaction.response.send_message(
+                view= discord.ui.View(timeout=0).add_item(
+                    discord.ui.Button(
+                        label= 'Play Wordle',
+                        style= discord.ButtonStyle.link,
+                        url= 'https://www.nytimes.com/games/wordle/index.html')),
+                ephemeral= True)
 
-        @self.bot.tree.command(name='roll', description='Roll an N-sided die!', guild=self.guild)
+        @self._bot.tree.command(name='roll',
+            description= 'Roll an N-sided die!',
+            guild= self._guild)
         async def _(interaction: discord.Interaction, faces: discord.app_commands.Range[int, 2, None]):
             await interaction.response.send_message(f'You rolled a {randint(1, faces)}!')
 
-        @self.bot.tree.command(name='choose', description='Randomly choose ONE item from a list of words separated by spaces.', guild=self.guild)
-        async def _(interaction: discord.Interaction, choices: str):
-            await interaction.response.send_message(choice(choices.split()))
-
-    def _genLinkView(self) -> discord.ui.View:
-        return discord.ui.View(timeout=0).add_item(
-            discord.ui.Button(
-                label='Play Wordle',
-                style=discord.ButtonStyle.link,
-                url='https://www.nytimes.com/games/wordle/index.html'))
-
-    def _getResponse(self, game: GameScorer) -> str:
-        if game.won:
-            if game.numGuesses < 3:
+    def _getResponse(self, won: bool, numGuesses: int, *argeater) -> str:
+        if won:
+            if numGuesses < 3:
                 return choice(['damn that\'s crazy.. i have google too 🙄', 'suuuuuuuure\nyou just *knew* it right? 🤔'])
             
-            if game.numGuesses < 5:
-                return choice(['ok', 'yea', 'yep', 'that\'s definitely a game'])
+            if numGuesses < 5:
+                return choice(['ok?', 'yea', 'cool', 'yep', 'that\'s definitely a game'])
 
-            return choice([f'it actually took you {game.numGuesses} guess{"es" if game.numGuesses > 1 else ""}. lmao.', 'garbage'])
+            return choice([f'it actually took you {numGuesses} guess{"es" if numGuesses > 1 else ""}. lmao.', 'garbage'])
         return choice(['you suck!', 'better luck next time idiot'])
 
     def run(self) -> None:
-        self.bot.run(token=self.token)
+        """WARNING: This does not return until the bot stops."""
+
+        self._bot.run(token=self._token)
         print('Bot exited.')
