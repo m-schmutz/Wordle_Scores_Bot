@@ -8,7 +8,7 @@ LTRS_IN_GUESS = 5
 DEBUG = False
 
 def date_to_int():
-    return int(datetime.now().date().isoformat().replace('-', ''))
+    return int(datetime.now().date().strftime('%Y%m%d'))
 
 class UserStats:
     '''
