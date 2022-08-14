@@ -1,17 +1,20 @@
 import numpy as np
 import cv2
 import discord
-import ansi
+
+from discord.ext import commands
+from pytesseract import image_to_string
 from selenium import webdriver
 from selenium.webdriver.firefox.service import Service
-from pytesseract import image_to_string
-from datetime import datetime
+
 from time import perf_counter
-from discord.ext import commands
-from random import choice, randint
-from chimp import ChimpView
+from datetime import datetime
 from enum import Enum, auto
 from collections import Counter
+from random import choice, randint
+
+import ansi
+from chimp import ChimpView
 from database import BotDatabase, DoubleSubmit
 
 # decorator function for timing purposes
@@ -24,15 +27,10 @@ def timer(func):
         return ret
     return _inner
 
-PREV_PATH = './lib/prev.wotd'
-class _WebScraper:
-    """Keeps track of the Word of the Day. Uses Selenium to scrape the NYTimes Wordle webpage.
-    
-    ---
-    ## Methods
-    
-    wotd() -> str
-        Returns the Word of the Day."""
+
+
+class _wotdScraper:
+    """Keeps track of the Word of the Day. Uses Selenium to scrape the NYTimes Wordle webpage."""
 
     def __init__(self) -> None:
         options = webdriver.FirefoxOptions()
@@ -70,38 +68,23 @@ class _WebScraper:
 
         return self._wotd
 
-class _ImageProcessor:
-    """Reads an image of a users Wordle game to obtain their guesses.
-        
-    ---
-    ## Methods
-    
-    getGuesses(image: bytes) -> list[str]
-        Returns a list of the user's guesses."""
+class _imageProcessor:
+    """Reads an image of a users Wordle game to obtain their guesses."""
 
     def __init__(self) -> None:
-        self._grayscale = None
-        self._darkTheme = None
-        self._cell_mask = None
-        self._cell_contours = None
-        self._chars_mask = None
+        self._MAX_DARK = int(200)
+        self._MAX_THRESH = int(255)
 
-    def _genCellMask(self) -> cv2.Mat:
-        if self._darkTheme:
-            thresh = 30
-            mode = cv2.THRESH_BINARY
+    def _genCellContours(self, grayscale: cv2.Mat, darkTheme: bool) -> 'list[np.ndarray]':
+        # Create and use the cell mask to find the cell contours.
+        if darkTheme:
+            _, cell_mask = cv2.threshold(grayscale, 30, self._MAX_THRESH, cv2.THRESH_BINARY)
         else:
-            thresh = 200
-            mode = cv2.THRESH_BINARY_INV
-
-        _, mask = cv2.threshold(self._grayscale, thresh, 255, mode)
-        return mask
-
-    def _genCellContours(self) -> 'list[np.ndarray]':
-        contours, _ = cv2.findContours(self._cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            _, cell_mask = cv2.threshold(grayscale, self._MAX_DARK, self._MAX_THRESH, cv2.THRESH_BINARY_INV)
+        contours, _ = cv2.findContours(cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         # Remove non-quadrilaterals and non-squares
-        filtered = list()
+        filtered = []
         for c in contours:
             if c.size != 8:
                 continue
@@ -111,59 +94,59 @@ class _ImageProcessor:
                 continue
 
             filtered.append(c)
+        assert all(elem.shape == (4,1,2) for elem in filtered), ansi.red('Not all contours have the shape (4,1,2).')
 
         # Remove all axis of length one since they are useless. Additionally, reverse
         # the list since findContours works from SE to NW and we want our contours
         # organized from NW to SE (i.e. guess order).
-        assert all(elem.shape == (4,1,2) for elem in filtered), ansi.red('Not all contours have the shape (4,1,2).')
         return np.squeeze(filtered)[::-1]
 
-    def _genCharMask(self) -> cv2.Mat:
-        _, mask = cv2.threshold(self._grayscale, 200, 255, cv2.THRESH_BINARY_INV)
+    def _genMask(self, image: cv2.Mat) -> cv2.Mat:
+        grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        darkTheme = (np.median(grayscale[:1,:]) < self._MAX_DARK)
+
+        cell_contours = self._genCellContours(grayscale, darkTheme)
+        _, mask = cv2.threshold(grayscale, self._MAX_DARK, self._MAX_THRESH, cv2.THRESH_BINARY_INV)
 
         # squeeze letters horizontally
         cols = list()
-        for c in self._cell_contours[:5]:
+        for c in cell_contours[:5]:
             x,_,w,_ = cv2.boundingRect(c)
             off = w // 4
             cols.append(mask[:, x+off : x+w-off])
-        mask = cv2.hconcat(cols)
+        mask: cv2.Mat = cv2.hconcat(cols)
 
         # crop vertically
         ys = list(
             y
-            for contour in self._cell_contours
+            for contour in cell_contours
             for (_, y) in contour)
-        mask = mask[min(ys):max(ys), :]
+        mask: np.ndarray = mask[min(ys):max(ys), :]
 
         # potentially fill empty horizontal strips
-        if not self._darkTheme:
+        if not darkTheme:
             for i in range(mask.shape[0]):
                 if all(mask[i,:] == 0):
-                    mask[i,:] = 255
+                    mask[i,:] = self._MAX_THRESH
 
         return mask
 
-    def _tesseract(self) -> 'list[str]':
+    def getGuesses(self, image: bytes) -> 'list[str]':
         """Use Tesseract to convert a mask of the user's guesses into a list of strings."""
 
-        text:str = image_to_string(self._chars_mask, lang="eng", config='--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+        # Convert image from Discord (bytes -> np.ndarray -> cv2.Mat)
+        mat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+
+        # Generate mask and feed Tesseract :) *pat* *pat* good boy
+        text = image_to_string(
+            image= self._genMask(mat),
+            lang= "eng",
+            config= '--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+
+        # Convert raw string into list
         return text.lower().strip().split('\n')
 
-    def getGuesses(self, image: bytes) -> 'list[str]':
-        self._grayscale = cv2.cvtColor(
-            src = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR),
-            code = cv2.COLOR_BGR2GRAY)
-        self._darkTheme = (np.median(self._grayscale[:1,:]) < 200)
-        self._cell_mask = self._genCellMask()
-        self._cell_contours = self._genCellContours()
-        self._chars_mask = self._genCharMask()
-
-        guesses = self._tesseract()
-        self.__init__()
-        return guesses
-
-class _CharScore(Enum):
+class _charScore(Enum):
     CORRECT = auto()
     MISPLACED = auto()
     INCORRECT = auto()
@@ -171,26 +154,38 @@ class _CharScore(Enum):
     def __repr__(self) -> str:
         return self.name
 
-class _GameAnalyzer:
-    # Assigns each character a _CharScore.
-    def scoreGame(self, guesses: 'list[str]', wotd: str) -> 'tuple[bool, int, int, int]':
-        self.numGuesses = len(guesses)
+class _gameAnalyzer:
+    def __init__(self) -> None:
+        self._ip = _imageProcessor()
+        self._ws = _wotdScraper()
+
+    # def _free(self) -> None:
+    #     self.guesses = None
+    #     self.scores = None
+    #     self.solved = None
+    #     self.numGreen = None
+    #     self.numYellow = None
+
+    # Assigns each character a _charScore.
+    def scoreGame(self, image: bytes, subDate: datetime) -> 'tuple[bool, int, int, int]':
+        self.guesses = self._ip.getGuesses(image)
         self.numGreen = 0
         self.numYellow = 0
+        self.scores = []
 
+        wotd = self._ws.wotd(subDate)
         wotd_char_counts = Counter(wotd)
-        results = []
 
         # Score each guess
-        for guess in guesses:
-            scores = [_CharScore.INCORRECT] * 5
-            remaining = list()
+        for guess in self.guesses:
+            score = [ _charScore.INCORRECT ] * 5
+            remaining = []
 
             # Mark all correct characters
             for i, gchar, wchar in zip(range(5), guess, wotd):
                 if gchar == wchar:
                     wotd_char_counts[wchar] -= 1
-                    scores[i] = _CharScore.CORRECT
+                    score[i] = _charScore.CORRECT
                     self.numGreen += 1
                 else:
                     remaining.append(i)
@@ -201,44 +196,24 @@ class _GameAnalyzer:
                 wchar = wotd[index]
                 if gchar in wotd and wotd_char_counts[gchar] > 0:
                     wotd_char_counts[gchar] -= 1
-                    scores[index] = _CharScore.MISPLACED
+                    score[index] = _charScore.MISPLACED
                     self.numYellow += 1
 
-            results.append(scores)
+            self.scores.append(score)
 
-        self.won = all(s == _CharScore.CORRECT
-            for s in results[-1])
+        self.solved = all(s == _charScore.CORRECT
+            for s in self.scores[-1])
 
-        return (self.won, self.numGuesses, self.numGreen, self.numYellow)
-
-    # Returns a list of colored guesses according to the Wordle scheme.
-    def _pretty(self) -> 'list[str]':
-        # For each guess...
-        pretty = []
-        for guess, scores in zip(self._ip.guesses, self.scores):
-            # For each character in the guess...
-            str_score = ''
-            for char, score in zip(guess, scores):
-                if score == _CharScore.CORRECT:
-                    str_score += ansi.green(char)
-                elif score == _CharScore.MISPLACED:
-                    str_score += ansi.yellow(char)
-                elif score == _CharScore.INCORRECT:
-                    str_score += ansi.rgb(char, r=150, g=150, b=150)
-                else:
-                    print(f'Invalid score type <{score}>. Returning original character.')
-            pretty.append(str_score)
-        return pretty
+        # -> (SOLVED bool, #GUESSES int, #GREEN int, #YELLOW int)
+        return (self.solved, len(self.guesses), self.numGreen, self.numYellow)
 
 class Bot:
     def __init__(self, token: str, id: int) -> None:
         self._token = token
         self._guild = discord.Object(id=id)
         self._synced = False
-        self._scraper = _WebScraper()
-        self._ip = _ImageProcessor()
-        self._ga = _GameAnalyzer()
-        self._db = BotDatabase(db_path='./lib/stats._db')
+        self._ga = _gameAnalyzer()
+        self._db = BotDatabase(db_path='./lib/stats.db')
         self._bot = commands.Bot(
             command_prefix = '!',
             intents = discord.Intents.all(),
@@ -259,19 +234,18 @@ class Bot:
             description= 'Submit a screenshot of your Wordle game!',
             guild= self._guild)
         async def _(interaction: discord.Interaction, image: discord.Attachment):
+            # Defer the response and use Webhook to reply since the common case responds more than once.
+            await interaction.response.defer(
+                ephemeral= False,
+                thinking= True)
 
-            # Defer the response. Processing the game may take longer than 3 seconds.
-            await interaction.response.defer(ephemeral=True, thinking=True)
+            # Get relevant data
+            subDate = interaction.created_at.astimezone().date()
+            results = self._ga.scoreGame(await image.read(), subDate)
 
-            # Get data
-            subDate = interaction.created_at.astimezone().date() # submission date
-            wotd = self._scraper.wotd(subDate)
-            guesses = self._ip.getGuesses(await image.read())
-            results = self._ga.scoreGame(guesses, wotd)
-
-            # Send to database and reply
+            # Update database then reply
             try:
-                self._db.submit_data(str(interaction.user), *results, subDate)
+                self._db.submit_data(str(interaction.user), subDate, *results)
             except DoubleSubmit:
                 await interaction.followup.send(
                     content= 'You already submit today\'s game :)',
@@ -309,8 +283,8 @@ class Bot:
         async def _(interaction: discord.Interaction, faces: discord.app_commands.Range[int, 2, None]):
             await interaction.response.send_message(f'You rolled a {randint(1, faces)}!')
 
-    def _getResponse(self, won: bool, numGuesses: int, *argeater) -> str:
-        if won:
+    def _getResponse(self, solved: bool, numGuesses: int, *argeater) -> str:
+        if solved:
             if numGuesses < 3:
                 return choice(['damn that\'s crazy.. i have google too 🙄', 'suuuuuuuure\nyou just *knew* it right? 🤔'])
             
