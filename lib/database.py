@@ -363,6 +363,9 @@ class BotDatabase:
         # the database. _raw will be None if the username does not exist in the database
         _raw = _cur.execute(f"SELECT last_submit from User_Data WHERE username = '{username}';").fetchone()
 
+        # close the cursor
+        _cur.close()
+
         # user does exist in database
         if _raw:
             # extract the last submission date for this user
