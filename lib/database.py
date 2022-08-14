@@ -7,9 +7,6 @@ LTRS_IN_GUESS = 5
 # set DEBUG to True if you want to ignore double submits
 DEBUG = False
 
-def date_to_int():
-    return int(datetime.now().date().strftime('%Y%m%d'))
-
 class UserStats:
     '''
     Object to contain user stats returned from the database
@@ -40,13 +37,13 @@ class UserStats:
         self.curr_streak = curr_streak
         self.max_streak = max_streak
         
-        __total_letters = guesses * LTRS_IN_GUESS
-        self.total_letters = __total_letters
+        _total_letters = guesses * LTRS_IN_GUESS
+        self.total_letters = _total_letters
 
         self.avg_guesses = guesses / attempts
 
-        self.green_rate = (greens / __total_letters) * 100
-        self.yellow_rate = (yellows / __total_letters) * 100
+        self.green_rate = (greens / _total_letters) * 100
+        self.yellow_rate = (yellows / _total_letters) * 100
 
     def __str__(self) -> str:
         return f'''
@@ -88,13 +85,13 @@ class GroupStats:
         self.greens = greens
         self.yellows = yellows
 
-        __total_letters = guesses * LTRS_IN_GUESS
-        self.total_letters = __total_letters
+        _total_letters = guesses * LTRS_IN_GUESS
+        self.total_letters = _total_letters
 
         self.avg_guesses = guesses / attempts
 
-        self.green_rate = (greens / __total_letters) * 100
-        self.yellow_rate = (yellows / __total_letters) * 100
+        self.green_rate = (greens / _total_letters) * 100
+        self.yellow_rate = (yellows / _total_letters) * 100
 
     def __str__(self) -> str:
         return f'''
@@ -126,12 +123,10 @@ class DoubleSubmit(Exception):
 
 class BotDatabase:
     '''
-    Database class. Contains two member variables _database and _users. 
+    Database class. Contains one member _database. 
     _database is a sqlite3 database connection where data is stored.
-    _users is a python dictionary containing the usernames of users that are in the database,
-    each user maps to the date of their last submission 
     '''
-    def __init__(self, db_path:str):
+    def __init__(self, db_path:str) -> None:
         '''
         BotDatabase(path:str) -> BotDatabase object with sqlite3 database stored at specified path
         For example: BotDatabase('/path/to/database')
@@ -143,14 +138,11 @@ class BotDatabase:
         # initialize sqlite database at specified path
         self._database = sql.connect(db_path)
 
-        # initialize dictionary to contain users and their last submission date
-        self._users = dict()
-
-        # initialize cursor
-        _cur = self._database.cursor()
-
         # if the database did not previously exist, initialize the new one
         if not exists:
+
+            # initialize cursor
+            _cur = self._database.cursor()
 
             # execute sql script to initialize the sqlite database
             _cur.executescript('''
@@ -201,16 +193,6 @@ class BotDatabase:
             # close the cursor
             _cur.close()
 
-        # if the database does exist, load data 
-        else:
-
-            # get usernames and their last submits
-            _existing = _cur.execute(f"SELECT username, last_submit from User_Data").fetchall()
-            
-            # load data into the _users
-            for (username, last_submit) in _existing:
-                self._users[username] = last_submit
-
         # commit the changes to the database
         self._database.commit()
 
@@ -218,7 +200,7 @@ class BotDatabase:
         # close connection to database
         self._database.close()
 
-    def get_user_stats(self, username:str):
+    def get_user_stats(self, username:str) -> UserStats:
         '''
         Method returns the stats on the specified user
         Stats returned: 
@@ -238,7 +220,7 @@ class BotDatabase:
         # return UserStats object
         return user_stats
 
-    def get_group_stats(self):
+    def get_group_stats(self) -> GroupStats:
 
         # initialize cursor
         _cur = self._database.cursor()
@@ -280,7 +262,7 @@ class BotDatabase:
         # return computed values
         return _solves_update, _streak_update, _last_solve_update
 
-    def _update_user(self, username:str, solved:bool, guesses:int, greens:int, yellows:int, date:int):
+    def _update_user(self, username:str, solved:bool, guesses:int, greens:int, yellows:int, date:int) -> None:
 
         # initialize cursor
         _cur = self._database.cursor()
@@ -315,22 +297,22 @@ class BotDatabase:
         # commit changes to the database
         self._database.commit()
 
-    def _add_user(self, username:str, solved:bool, guesses:int, greens:int, yellows:int, date:int):
+    def _add_user(self, username:str, solved:bool, guesses:int, greens:int, yellows:int, date:int) -> None:
         
         # attempts set to 1
-        __attempts_insert = 1
+        _attempts_insert = 1
         
         # solves and streak set to 1 if solved; otherwise 0
-        __solves_insert = __streak_insert = 1 if solved else 0
+        _solves_insert = _streak_insert = 1 if solved else 0
 
         # last_solve will set to todays date if solved; otherwise set to 0
-        __date_insert = date if solved else 0
+        _date_insert = date if solved else 0
        
         # initialize cursor
-        __cur = self._database.cursor()
+        _cur = self._database.cursor()
 
         # execute sql script to add new user to the database
-        __cur.executescript(f'''
+        _cur.executescript(f'''
             INSERT INTO User_Data (
                 username, 
                 attempts, 
@@ -344,55 +326,59 @@ class BotDatabase:
                 last_submit)
                 Values (
                     '{username}', 
-                    {__attempts_insert}, 
-                    {__solves_insert}, 
+                    {_attempts_insert}, 
+                    {_solves_insert}, 
                     {guesses}, 
                     {greens}, 
                     {yellows}, 
-                    {__streak_insert}, 
-                    {__streak_insert}, 
-                    {__date_insert},
+                    {_streak_insert}, 
+                    {_streak_insert}, 
+                    {_date_insert},
                     {date});
 
             UPDATE Group_Data SET attempts = attempts + 1;
-            UPDATE Group_Data SET solves = solves + {__solves_insert};
+            UPDATE Group_Data SET solves = solves + {_solves_insert};
             UPDATE Group_Data SET guesses = guesses + {guesses};
             UPDATE Group_Data SET greens = greens + {greens};
             UPDATE Group_Data SET yellows = yellows + {yellows};
         ''')
 
         # close the cursor
-        __cur.close()
+        _cur.close()
 
         # commit the changes to the database
         self._database.commit()
 
-    def submit_data(self, username:str, solved:bool, guesses:int, greens:int, yellows:int, dtime:datetime):
+    def submit_data(self, username:str, solved:bool, guesses:int, greens:int, yellows:int, dtime:datetime) -> None:
         '''Given the username and info on attempt, user stats are updated in the database. A user is added to the database if
         they are a new user. Method will raise DoubleSubmit exception if method is called on the same user twice or more on one day'''
 
-        # grab todays date in integer form (YYYYMMDD)
-        date = date_to_int()
+        # convert datetime object to int of form YYYYMMDD
+        _date = int(dtime.strftime('%Y%m%d'))
 
-        # check if the user is in the database
-        if username in self._users:
+        # initialize cursor
+        _cur = self._database.cursor()
 
-            # get the date of their last submission 
-            _last_submit = self._users[username]
+        # get the raw result from the database query. _raw will be a tuple containing the last solve for the specified username if they are in 
+        # the database. _raw will be None if the username does not exist in the database
+        _raw = _cur.execute(f"SELECT last_submit from User_Data WHERE username = '{username}';").fetchone()
+
+        # user does exist in database
+        if _raw:
+            # extract the last submission date for this user
+            _last_submit, = _raw
 
             # check if this user has already submitted this day
-            if _last_submit == date and not DEBUG:
-                
+            if _last_submit == _date and not DEBUG:
+
                 # raise DoubleSubmit exception
                 raise DoubleSubmit(username)
-
-            # if we get here, this is a new submission for today. Update database
-            self._update_user(username, solved, guesses, greens, yellows, date)
-
-        # if user is not in _users, add new user and update database
-        else:
-            # add user to the database
-            self._add_user(username, solved, guesses, greens, yellows, date)
             
-        # add user to the _users registry
-        self._users[username] = date
+            # if we get to this point the user is submitting for the first time on day: _date
+            # update stats
+            self._update_user(username, solved, guesses, greens, yellows, _date)
+
+        # user does not exist in database
+        else:
+            # add the user to the database
+            self._add_user(username, solved, guesses, greens, yellows, _date)
