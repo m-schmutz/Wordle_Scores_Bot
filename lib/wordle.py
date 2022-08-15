@@ -30,8 +30,7 @@ def timer(func):
 
 
 class UnidentifiableGame(Exception):
-    def __init__(self, *args: object) -> None:
-        super().__init__(*args)
+    pass
 
 class _wotdScraper:
     """Keeps track of the Word of the Day. Uses Selenium to scrape the NYTimes Wordle webpage."""
@@ -291,10 +290,6 @@ class Bot:
             guild= self._guild)
         async def _(interaction: discord.Interaction, faces: discord.app_commands.Range[int, 2, None]):
             await interaction.response.send_message(f'You rolled a {randint(1, faces)}!')
-
-    def _calcUpdatedStats(self):
-        self._db.get_user_stats()
-        return
 
     def _getResponse(self, solved: bool, numGuesses: int, *argeater) -> str:
         if solved:
