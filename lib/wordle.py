@@ -29,6 +29,10 @@ def timer(func):
 
 
 
+class UnidentifiableGame(Exception):
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+
 class _wotdScraper:
     """Keeps track of the Word of the Day. Uses Selenium to scrape the NYTimes Wordle webpage."""
 
@@ -105,11 +109,13 @@ class _imageProcessor:
         grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         darkTheme = (np.median(grayscale[:1,:]) < self._MAX_DARK)
 
-        cell_contours = self._genCellContours(grayscale, darkTheme)
         _, mask = cv2.threshold(grayscale, self._MAX_DARK, self._MAX_THRESH, cv2.THRESH_BINARY_INV)
+        cell_contours = self._genCellContours(grayscale, darkTheme)
+        if len(cell_contours) != 30:
+            raise UnidentifiableGame
 
         # squeeze letters horizontally
-        cols = list()
+        cols = []
         for c in cell_contours[:5]:
             x,_,w,_ = cv2.boundingRect(c)
             off = w // 4
@@ -117,7 +123,7 @@ class _imageProcessor:
         mask: cv2.Mat = cv2.hconcat(cols)
 
         # crop vertically
-        ys = list(
+        ys = set(
             y
             for contour in cell_contours
             for (_, y) in contour)
@@ -232,14 +238,18 @@ class Bot:
             description= 'Submit a screenshot of your Wordle game!',
             guild= self._guild)
         async def _(interaction: discord.Interaction, image: discord.Attachment):
-            # Defer the response and use Webhook to reply since the common case responds more than once.
-            await interaction.response.defer(
-                ephemeral= False,
-                thinking= True)
+            # Shhhhhhhhhhhh we'll get there, Discord...
+            await interaction.response.defer()
 
             # Get relevant data
             subDate = interaction.created_at.astimezone().date()
-            results = self._ga.scoreGame(await image.read(), subDate)
+            try:
+                results = self._ga.scoreGame(await image.read(), subDate)
+            except UnidentifiableGame:
+                await interaction.followup.send(
+                    content= '***I DO NOT UNDERSTAND, TRY A DIFFERENT IMAGE***',
+                    ephemeral= True)
+                return
 
             # Update database then reply
             try:
@@ -250,8 +260,9 @@ class Bot:
                     ephemeral= True)
             else:
                 await interaction.followup.send(
-                    file= await image.to_file(spoiler=True),
-                    content= f'{interaction.user.mention}\'s submission:')
+                    content= f'{interaction.user.mention}\'s submission:',
+                    file= await image.to_file(spoiler=True))
+
                 await interaction.followup.send(
                     content= self._getResponse(*results),
                     ephemeral= True)
@@ -280,6 +291,10 @@ class Bot:
             guild= self._guild)
         async def _(interaction: discord.Interaction, faces: discord.app_commands.Range[int, 2, None]):
             await interaction.response.send_message(f'You rolled a {randint(1, faces)}!')
+
+    def _calcUpdatedStats(self):
+        self._db.get_user_stats()
+        return
 
     def _getResponse(self, solved: bool, numGuesses: int, *argeater) -> str:
         if solved:
