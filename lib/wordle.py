@@ -131,15 +131,12 @@ class _imageProcessor:
 
         return mask
 
-    def getGuesses(self, image: bytes) -> 'list[str]':
+    def getGuesses(self, image: cv2.Mat) -> 'list[str]':
         """Use Tesseract to convert a mask of the user's guesses into a list of strings."""
-
-        # Convert image from Discord (bytes -> np.ndarray -> cv2.Mat)
-        mat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
 
         # Generate mask and feed Tesseract :) *pat* *pat* good boy
         text = image_to_string(
-            image= self._genMask(mat),
+            image= self._genMask(image),
             lang= "eng",
             config= '--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ')
 
@@ -156,56 +153,57 @@ class _charScore(Enum):
 
 class _gameAnalyzer:
     def __init__(self) -> None:
-        self._ip = _imageProcessor()
-        self._ws = _wotdScraper()
-
-    # def _free(self) -> None:
-    #     self.guesses = None
-    #     self.scores = None
-    #     self.solved = None
-    #     self.numGreen = None
-    #     self.numYellow = None
+        self._imgproc = _imageProcessor()
+        self._scraper = _wotdScraper()
+        self.guesses = None
+        self.numGreen = None
+        self.numYellow = None
+        self.scores = None
 
     # Assigns each character a _charScore.
     def scoreGame(self, image: bytes, subDate: datetime) -> 'tuple[bool, int, int, int]':
-        self.guesses = self._ip.getGuesses(image)
+
+        # Convert image from Discord (bytes -> np.ndarray -> cv2.Mat)
+        image: cv2.Mat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+
+        # Get user guesses from image
+        self.guesses = self._imgproc.getGuesses(image)
+        self.numGuesses = len(self.guesses)
         self.numGreen = 0
         self.numYellow = 0
         self.scores = []
 
-        wotd = self._ws.wotd(subDate)
-        wotd_char_counts = Counter(wotd)
-
         # Score each guess
+        wotd = self._scraper.wotd(subDate)
+        init_counts = Counter(wotd)
+        init_score = [ _charScore.INCORRECT ] * 5
+
         for guess in self.guesses:
-            score = [ _charScore.INCORRECT ] * 5
-            remaining = []
+            score = init_score.copy()
+            counts = init_counts.copy()
+            remaining: list[tuple] = []
 
             # Mark all correct characters
             for i, gchar, wchar in zip(range(5), guess, wotd):
                 if gchar == wchar:
-                    wotd_char_counts[wchar] -= 1
                     score[i] = _charScore.CORRECT
+                    counts[wchar] -= 1
                     self.numGreen += 1
                 else:
-                    remaining.append(i)
+                    remaining.append((i, gchar))
 
             # Mark all misplaced characters
-            for index in remaining:
-                gchar = guess[index]
-                wchar = wotd[index]
-                if gchar in wotd and wotd_char_counts[gchar] > 0:
-                    wotd_char_counts[gchar] -= 1
-                    score[index] = _charScore.MISPLACED
+            for i, gchar in remaining:
+                if gchar in wotd and counts[gchar] > 0:
+                    score[i] = _charScore.MISPLACED
+                    counts[gchar] -= 1
                     self.numYellow += 1
 
             self.scores.append(score)
-
-        self.solved = all(s == _charScore.CORRECT
-            for s in self.scores[-1])
+        self.solved = all(s == _charScore.CORRECT for s in self.scores[-1])
 
         # -> (SOLVED bool, #GUESSES int, #GREEN int, #YELLOW int)
-        return (self.solved, len(self.guesses), self.numGreen, self.numYellow)
+        return (self.solved, self.numGuesses, self.numGreen, self.numYellow)
 
 class Bot:
     def __init__(self, token: str, id: int) -> None:
