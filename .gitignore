@@ -7,3 +7,4 @@ lib/installs.txt
 lib/playground.py
 lib/wotd.txt
 lib/*.db
+lib/wordle_pickles/

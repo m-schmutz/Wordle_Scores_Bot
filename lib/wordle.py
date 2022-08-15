@@ -13,9 +13,9 @@ from enum import Enum, auto
 from collections import Counter
 from random import choice, randint
 
-import ansi
-from chimp import ChimpView
-from database import BotDatabase, DoubleSubmit
+from . import ansi
+from .chimp import ChimpView
+from .database import BotDatabase, DoubleSubmit
 
 def timer(func):
     def _inner(*args, **kwargs):
