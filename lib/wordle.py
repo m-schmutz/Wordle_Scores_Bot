@@ -17,7 +17,6 @@ import ansi
 from chimp import ChimpView
 from database import BotDatabase, DoubleSubmit
 
-# decorator function for timing purposes
 def timer(func):
     def _inner(*args, **kwargs):
         beg = perf_counter()
@@ -307,3 +306,12 @@ class Bot:
 
         self._bot.run(token=self._token)
         print('Bot exited.')
+
+
+""" STATS to return on submission
+- # guesses distribution
+- # games played
+- win %
+- streak
+- max streak
+"""
