@@ -29,7 +29,9 @@ def timer(func):
 
 
 class UnidentifiableGame(Exception):
-    pass
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+        self.message = '***I DO NOT UNDERSTAND, TRY A DIFFERENT IMAGE***'
 
 class _wotdScraper:
     """Keeps track of the Word of the Day. Uses Selenium to scrape the NYTimes Wordle webpage."""
@@ -238,32 +240,41 @@ class Bot:
         async def _(interaction: discord.Interaction, image: discord.Attachment):
             # Shhhhhhhhhhhh we'll get there, Discord...
             await interaction.response.defer()
-
-            # Get relevant data
             subDate = interaction.created_at.astimezone().date()
+
+            # Find the game and score it
             try:
                 results = self._ga.scoreGame(await image.read(), subDate)
-            except UnidentifiableGame:
-                await interaction.followup.send(
-                    content= '***I DO NOT UNDERSTAND, TRY A DIFFERENT IMAGE***',
-                    ephemeral= True)
+            except UnidentifiableGame as e:
+                await interaction.followup.send(content= e.message, ephemeral= True)
                 return
 
-            # Update database then reply
+            # Submit to database
             try:
-                self._db.submit_data(str(interaction.user), subDate, *results)
-            except DoubleSubmit:
-                await interaction.followup.send(
-                    content= 'You already submit today\'s game :)',
-                    ephemeral= True)
-            else:
-                await interaction.followup.send(
-                    content= f'{interaction.user.mention}\'s submission:',
-                    file= await image.to_file(spoiler=True))
+                stats = self._db.submit_data(str(interaction.user), subDate, *results)
+            except DoubleSubmit as e:
+                await interaction.followup.send(content= e.message, ephemeral= True)
+                return
 
-                await interaction.followup.send(
-                    content= self._getResponse(*results),
-                    ephemeral= True)
+            # Reply with stats
+            """ STATS to return on submission
+            - # guesses distribution
+            - # games played
+            - win %
+            - streak
+            - max streak
+            """
+            content = f'{interaction.user.mention}\'s submission:\n'
+            content += f'{2} games played\n'
+            content += f'{69.420374:.02f}% win rate\n'
+
+            await interaction.followup.send(
+                content= content,
+                file= await image.to_file(spoiler=True))
+
+            await interaction.followup.send(
+                content= self._getResponse(*results),
+                ephemeral= True)
 
         @self._bot.tree.command(name= 'chimp',
             description= 'Are you smarter than a chimp? Play this quick memorization game to find out!',
@@ -306,12 +317,3 @@ class Bot:
 
         self._bot.run(token=self._token)
         print('Bot exited.')
-
-
-""" STATS to return on submission
-- # guesses distribution
-- # games played
-- win %
-- streak
-- max streak
-"""
