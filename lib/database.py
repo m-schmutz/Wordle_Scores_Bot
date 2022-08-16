@@ -7,6 +7,22 @@ LTRS_IN_GUESS = 5
 # set DEBUG to True if you want to ignore double submits
 DEBUG = False
 
+class BaseStats:
+    """Default statistics to return upon a submission.
+
+    ---
+    - \# guesses distribution
+    - \# games played
+    - win %
+    - streak
+    - max streak"""
+    def __init__(self, guessDistribution: str, numGamesPlayed: int, winRate: float, streak: int, maxStreak: int) -> None:
+        self.guessDistribution = str(guessDistribution)
+        self.numGamesPlayed = int(numGamesPlayed)
+        self.winRate = float(winRate)
+        self.streak = int(streak)
+        self.maxStreak = int(maxStreak)
+
 class UserStats:
     '''
     Object to contain user stats returned from the database
@@ -350,7 +366,7 @@ class BotDatabase:
         # commit the changes to the database
         self._database.commit()
 
-    def submit_data(self, username:str, dtime:datetime, solved:bool, guesses:int, greens:int, yellows:int) -> None:
+    def submit_data(self, username:str, dtime:datetime, solved:bool, guesses:int, greens:int, yellows:int) -> BaseStats:
         '''Given the username and info on attempt, user stats are updated in the database. A user is added to the database if
         they are a new user. Method will raise DoubleSubmit exception if method is called on the same user twice or more on one day'''
 
@@ -386,3 +402,11 @@ class BotDatabase:
         else:
             # add the user to the database
             self._add_user(username, solved, guesses, greens, yellows, _date)
+        
+
+        guessDistr = '10 20 30 40 50 60'
+        numGames = 32
+        winPerc = 94.342341
+        streak = 3
+        maxStreak = 8
+        return BaseStats(guessDistr, numGames, winPerc, streak, maxStreak)

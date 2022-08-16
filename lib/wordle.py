@@ -1,3 +1,4 @@
+from typing import Any, Literal, Optional, Union
 import numpy as np
 import cv2
 import discord
@@ -13,9 +14,11 @@ from enum import Enum, auto
 from collections import Counter
 from random import choice, randint
 
-from . import ansi
-from .chimp import ChimpView
-from .database import BotDatabase, DoubleSubmit
+import ansi
+from chimp import ChimpView
+from database import BaseStats, BotDatabase, DoubleSubmit
+
+from inspect import cleandoc
 
 def timer(func):
     def _inner(*args, **kwargs):
@@ -32,6 +35,29 @@ class UnidentifiableGame(Exception):
     def __init__(self, *args: object) -> None:
         super().__init__(*args)
         self.message = '***I DO NOT UNDERSTAND, TRY A DIFFERENT IMAGE***'
+
+class CharScore(Enum):
+    CORRECT = auto()
+    MISPLACED = auto()
+    INCORRECT = auto()
+
+    def __repr__(self) -> str:
+        return self.name
+
+class SubmissionReply(discord.Embed):
+    def __init__(self, *, username: str, stats: BaseStats, description: Optional[str] = None, timestamp: Optional[datetime] = None):
+        super().__init__(
+            color= discord.Color.random(),
+            title= f'>>> Results for {username}',
+            description= description,
+            timestamp= timestamp)
+
+        # self.set_image(url='https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fimgc.allpostersimages.com%2Fimg%2Fposters%2Fsteve-buscemi-smiling-in-close-up-portrait_u-L-Q1171600.jpg%3Fh%3D550%26p%3D0%26w%3D550%26background%3Dffffff&f=1&nofb=1')
+        self.add_field(name='Guess Distribution', value=stats.guessDistribution, inline=False)
+        self.add_field(name='Games Played', value=stats.numGamesPlayed, inline=False)
+        self.add_field(name='Win Rate', value=f'{stats.winRate:.02f}%', inline=False)
+        self.add_field(name='Streak', value=stats.streak, inline=False)
+        self.add_field(name='Max Streak', value=stats.maxStreak, inline=False)
 
 class _wotdScraper:
     """Keeps track of the Word of the Day. Uses Selenium to scrape the NYTimes Wordle webpage."""
@@ -56,7 +82,7 @@ class _wotdScraper:
         self._driver.get('https://www.nytimes.com/games/wordle/index.html')
         return str(self._driver.execute_script('return JSON.parse(this.localStorage.getItem("nyt-wordle-state")).solution'))
 
-    def wotd(self, subDate: datetime) -> str:
+    def wotd(self, date: datetime) -> str:
         """Returns today's word."""
 
         # Potentially update today's word
@@ -67,7 +93,7 @@ class _wotdScraper:
             self._last_updated = today
 
             # If we updated the word as user submit, return the previous word
-            if subDate < today:
+            if date < today:
                 return prev_wotd
 
         return self._wotd
@@ -137,62 +163,83 @@ class _imageProcessor:
 
         return mask
 
-    def getGuesses(self, image: cv2.Mat) -> 'list[str]':
+    def getGuesses(self, image: bytes) -> 'list[str]':
         """Use Tesseract to convert a mask of the user's guesses into a list of strings."""
+
+        # Convert Discord image (bytes) to OpenCV image (Mat)
+        mat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
 
         # Generate mask and feed Tesseract :) *pat* *pat* good boy
         text = image_to_string(
-            image= self._genMask(image),
+            image= self._genMask(mat),
             lang= "eng",
             config= '--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ')
 
         # Convert raw string into list
         return text.lower().strip().split('\n')
 
-class _charScore(Enum):
-    CORRECT = auto()
-    MISPLACED = auto()
-    INCORRECT = auto()
-
-    def __repr__(self) -> str:
-        return self.name
-
 class _gameAnalyzer:
     def __init__(self) -> None:
         self._imgproc = _imageProcessor()
         self._scraper = _wotdScraper()
-        self.guesses = None
-        self.numGreen = None
-        self.numYellow = None
-        self.scores = None
+        self._initGameData()
 
-    # Assigns each character a _charScore.
-    def scoreGame(self, image: bytes, subDate: datetime) -> 'tuple[bool, int, int, int]':
-
-        # Convert image from Discord (bytes -> np.ndarray -> cv2.Mat)
-        image: cv2.Mat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
-
-        # Get user guesses from image
-        self.guesses = self._imgproc.getGuesses(image)
-        self.numGuesses = len(self.guesses)
+    def _initGameData(self, guesses: list = [], wotd: str = ''):
+        self.guesses = guesses
+        self.numGuesses = len(guesses)
+        self.scores = []
         self.numGreen = 0
         self.numYellow = 0
-        self.scores = []
+        self.wotd = wotd
+        self.defaultCounts = Counter(wotd)
+        self.defaultScore = [CharScore.INCORRECT] * 5
+
+    # Assigns each character a CharScore.
+    def scoreGame(self, image: bytes, submissionDate: datetime) -> 'tuple[bool, int, int, int]':
+        """Parse a screenshot of a Wordle game and return information about the game.
+        
+        ---
+        ## Parameters
+
+        image : `bytes`
+            The user-provided screenshot of their Wordle game.
+
+        submissionDate : `datetime`
+            A datetime object respresenting the time of submission.
+
+        ---
+        ## Returns
+
+            self.solved : `bool` ,
+
+            self.numGuesses : `int` ,
+
+            self.numGreen : `int` ,
+
+            self.numYellow : `int`
+
+        ---
+        ## Raises
+
+        UnidentifiableGame
+            Unable to find a game in the image.
+        """
+
+        # Get user guesses and initialize game data
+        self._initGameData(
+            guesses= self._imgproc.getGuesses(image),
+            wotd= self._scraper.wotd(submissionDate))
 
         # Score each guess
-        wotd = self._scraper.wotd(subDate)
-        init_counts = Counter(wotd)
-        init_score = [ _charScore.INCORRECT ] * 5
-
         for guess in self.guesses:
-            score = init_score.copy()
-            counts = init_counts.copy()
+            score = self.defaultScore.copy()
+            counts = self.defaultCounts.copy()
             remaining: list[tuple] = []
 
             # Mark all correct characters
-            for i, gchar, wchar in zip(range(5), guess, wotd):
+            for i, gchar, wchar in zip(range(5), guess, self.wotd):
                 if gchar == wchar:
-                    score[i] = _charScore.CORRECT
+                    score[i] = CharScore.CORRECT
                     counts[wchar] -= 1
                     self.numGreen += 1
                 else:
@@ -200,16 +247,18 @@ class _gameAnalyzer:
 
             # Mark all misplaced characters
             for i, gchar in remaining:
-                if gchar in wotd and counts[gchar] > 0:
-                    score[i] = _charScore.MISPLACED
+                if gchar in self.wotd and counts[gchar] > 0:
+                    score[i] = CharScore.MISPLACED
                     counts[gchar] -= 1
                     self.numYellow += 1
 
             self.scores.append(score)
-        self.solved = all(s == _charScore.CORRECT for s in self.scores[-1])
+        self.solved = all(s == CharScore.CORRECT for s in self.scores[-1])
 
         # -> (SOLVED bool, #GUESSES int, #GREEN int, #YELLOW int)
         return (self.solved, self.numGuesses, self.numGreen, self.numYellow)
+
+
 
 class Bot:
     def __init__(self, token: str, id: int) -> None:
@@ -240,36 +289,27 @@ class Bot:
         async def _(interaction: discord.Interaction, image: discord.Attachment):
             # Shhhhhhhhhhhh we'll get there, Discord...
             await interaction.response.defer()
-            subDate = interaction.created_at.astimezone().date()
+            date = interaction.created_at.astimezone().date()
 
             # Find the game and score it
             try:
-                results = self._ga.scoreGame(await image.read(), subDate)
+                results = self._ga.scoreGame(await image.read(), date)
             except UnidentifiableGame as e:
-                await interaction.followup.send(content= e.message, ephemeral= True)
+                await interaction.followup.send(content=e.message, ephemeral=True)
                 return
 
             # Submit to database
             try:
-                stats = self._db.submit_data(str(interaction.user), subDate, *results)
+                stats = self._db.submit_data(str(interaction.user), date, *results)
             except DoubleSubmit as e:
-                await interaction.followup.send(content= e.message, ephemeral= True)
+                await interaction.followup.send(content=e.message, ephemeral=True)
                 return
 
             # Reply with stats
-            """ STATS to return on submission
-            - # guesses distribution
-            - # games played
-            - win %
-            - streak
-            - max streak
-            """
-            content = f'{interaction.user.mention}\'s submission:\n'
-            content += f'{2} games played\n'
-            content += f'{69.420374:.02f}% win rate\n'
-
             await interaction.followup.send(
-                content= content,
+                embed= SubmissionReply(
+                    username= interaction.user.name,
+                    stats= stats),
                 file= await image.to_file(spoiler=True))
 
             await interaction.followup.send(
