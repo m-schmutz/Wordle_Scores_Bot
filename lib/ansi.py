@@ -25,7 +25,16 @@ class sgr(ansi):
         blue,\
         magenta,\
         cyan,\
-        white = (_esc(f'3{i}m') for i in range(8))
+        white = (_esc(f'{i}m') for i in range(30, 37+1))
+
+        bright_black,\
+        bright_red,\
+        bright_green,\
+        bright_yellow,\
+        bright_blue,\
+        bright_magenta,\
+        bright_cyan,\
+        bright_white = (_esc(f'{i}m') for i in range(90, 97+1))
 
         def rgb(r, g, b):
             return _esc(f'38;2;{r};{g};{b}m')
@@ -82,6 +91,8 @@ class sgr(ansi):
         return self.apply(self.bg.white if bg else self.fg.white)
     def yellow(self, bg=False):
         return self.apply(self.bg.yellow if bg else self.fg.yellow)
+    def bright_black(self):
+        return self.apply(self.fg.bright_black)
     def rgb(self, r=0, g=0, b=0, bg=False):
         return self.apply(self.bg.rgb(r, g, b) if bg else self.fg.rgb(r, g, b))
 
@@ -109,32 +120,34 @@ class cursor(ansi):
 
 ### Forwarding functions, for convenience ###
 # SGR
-def bold(string) -> ansi:
-    return sgr(string).bold()
-def faint(string) -> ansi:
-    return sgr(string).faint()
-def italic(string) -> ansi:
-    return sgr(string).italic()
-def underline(string) -> ansi:
-    return sgr(string).underline()
-def black(string, bg=False) -> ansi:
-    return sgr(string).black(bg)
-def blue(string, bg=False) -> ansi:
-    return sgr(string).blue(bg)
-def cyan(string, bg=False) -> ansi:
-    return sgr(string).cyan(bg)
-def green(string, bg=False) -> ansi:
-    return sgr(string).green(bg)
-def magenta(string, bg=False) -> ansi:
-    return sgr(string).magenta(bg)
-def red(string, bg=False) -> ansi:
-    return sgr(string).red(bg)
-def white(string, bg=False) -> ansi:
-    return sgr(string).white(bg)
-def yellow(string, bg=False) -> ansi:
-    return sgr(string).yellow(bg)
-def rgb(string, r=0, g=0, b=0, bg=False) -> ansi:
-    return sgr(string).rgb(r,g,b,bg)
+def bold(string) -> str:
+    return str(sgr(string).bold())
+def faint(string) -> str:
+    return str(sgr(string).faint())
+def italic(string) -> str:
+    return str(sgr(string).italic())
+def underline(string) -> str:
+    return str(sgr(string).underline())
+def black(string, bg=False) -> str:
+    return str(sgr(string).black(bg))
+def blue(string, bg=False) -> str:
+    return str(sgr(string).blue(bg))
+def cyan(string, bg=False) -> str:
+    return str(sgr(string).cyan(bg))
+def green(string, bg=False) -> str:
+    return str(sgr(string).green(bg))
+def magenta(string, bg=False) -> str:
+    return str(sgr(string).magenta(bg))
+def red(string, bg=False) -> str:
+    return str(sgr(string).red(bg))
+def white(string, bg=False) -> str:
+    return str(sgr(string).white(bg))
+def yellow(string, bg=False) -> str:
+    return str(sgr(string).yellow(bg))
+def bright_black(string) -> str:
+    return str(sgr(string).bright_black())
+def rgb(string, r=0, g=0, b=0, bg=False) -> str:
+    return str(sgr(string).rgb(r,g,b,bg))
 
 # Cursor
 def cursor_up(string, end=False):
