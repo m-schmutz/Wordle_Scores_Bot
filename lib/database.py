@@ -12,17 +12,65 @@ class BaseStats:
     """Default statistics to return upon a submission.
 
     ---
-    - \# guesses distribution
+    - guesses distribution
     - \# games played
     - win %
     - streak
     - max streak"""
-    def __init__(self, guessDistribution: str, numGamesPlayed: int, winRate: float, streak: int, maxStreak: int) -> None:
-        self.guessDistribution = str(guessDistribution)
-        self.numGamesPlayed = int(numGamesPlayed)
-        self.winRate = float(winRate)
+    def __init__(self, distro_str:str, games_played:int, win_rate:float, streak:int, max_streak:int) -> None:
+        self.guess_distro = str(distro_str)
+        self.games_played = int(games_played)
+        self.win_rate = float(win_rate)
         self.streak = int(streak)
-        self.maxStreak = int(maxStreak)
+        self.max_streak = int(max_streak)
+        
+class FullStats(BaseStats):
+    '''FullStats for a user
+    
+    ---
+    - \# games played
+    - \# total wins
+    - \# total guesses
+    - \# total greens
+    - \# total yellows
+    - \# uniques
+    - guesses distribution
+    - current streak
+    - max streak
+    - win rate
+    - average \# of guesses
+    - green rate 
+    - yellow rate
+    '''
+    def __init__(self, raw:Tuple) -> None:
+
+        # extract data fields from tuple
+        games_played, \
+        total_wins, \
+        total_guesses, \
+        total_greens, \
+        total_yellows, \
+        uniques, \
+        distro_str, \
+        streak, \
+        max_streak, \
+        win_rate, \
+        avg_guesses, \
+        green_rate, \
+        yellow_rate = raw
+
+        # initialize BaseStats members
+        super().__init__(distro_str, games_played, win_rate, streak, max_streak)
+
+        # initialize the FullStats fields
+        self.total_wins = total_wins
+        self.total_guesses = total_guesses
+        self.total_greens = total_greens
+        self.total_yellows = total_yellows
+        self.uniques = uniques
+        self.avg_guesses = avg_guesses
+        self.green_rate = green_rate
+        self.yellow_rate = yellow_rate
         
 class UpdateValues:
     def __init__(self, raw:Tuple, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> None:
@@ -183,7 +231,16 @@ class BotDatabase:
         _cur = self._database.cursor()
 
         # get fields needed calculate stats for this user
-        _raw = _cur.execute(f"SELECT games, wins, guesses, greens, yellows, uniques, guess_distro, last_solve, curr_streak, max_streak FROM User_Data WHERE username = '{username}';").fetchone()
+        _raw = _cur.execute(f'''SELECT games, 
+                                       wins, 
+                                       guesses, 
+                                       greens, 
+                                       yellows, 
+                                       uniques, 
+                                       guess_distro, 
+                                       last_solve, 
+                                       curr_streak, 
+                                       max_streak FROM User_Data WHERE username = '{username}';''').fetchone()
                 
         # create update values object
         vals = UpdateValues(_raw, win, guesses, greens, yellows, uniques, date)
@@ -213,13 +270,10 @@ class BotDatabase:
         # commit changes to the database
         self._database.commit()
 
-        # create BaseStats object to return
-        stats = BaseStats(vals._distro_str_update, vals._games_update, vals._win_rate_update, vals._streak_update, vals._max_update)
-
         # return the stats object
-        return stats
+        return BaseStats(vals._distro_str_update, vals._games_update, vals._win_rate_update, vals._streak_update, vals._max_update)
 
-    def _add_user(self, username:str, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> None:
+    def _add_user(self, username:str, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> BaseStats:
         
         # initialize the distribution dictionary
         _distro_dict = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}
@@ -303,10 +357,8 @@ class BotDatabase:
         # commit the changes to the database
         self._database.commit()
 
-        stats = BaseStats(_distro_insert, _games_insert, _win_rate, _streak_insert, _streak_insert)
-
         # return the base_stats
-        return stats
+        return BaseStats(_distro_insert, _games_insert, _win_rate, _streak_insert, _streak_insert)
 
     def submit_data(self, username:str, dtime:datetime, win:bool, guesses:int, greens:int, yellows:int, uniques:int) -> BaseStats:
         '''Given the username and info on attempt, user stats are updated in the database. A user is added to the database if
@@ -344,3 +396,25 @@ class BotDatabase:
         else:
             # add the user to the database
             return self._add_user(username, win, guesses, greens, yellows, uniques, _date)
+
+    def get_full_stats(self, username:str) -> FullStats:
+        #initialize cursor
+        _cur = self._database.cursor()
+
+        # get all data fields for the specified user
+        _raw = _cur.execute(f'''SELECT games, 
+                                       wins,
+                                       guesses, 
+                                       greens, 
+                                       yellows, 
+                                       uniques, 
+                                       guess_distro,
+                                       curr_streak, 
+                                       max_streak,
+                                       win_rate, 
+                                       avg_guesses,
+                                       green_rate, 
+                                       yellow_rate FROM User_Data CROSS JOIN User_Stats WHERE User_Data.username = '{username}';''').fetchone()
+        
+        # return FullStats object
+        return FullStats(_raw)
