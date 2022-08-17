@@ -8,59 +8,98 @@ LTRS_IN_GUESS = 5
 # set DEBUG to True if you want to ignore double submits
 DEBUG = False
 
-class UserStats:
-    '''
-    Object to contain user stats returned from the database
+class BaseStats:
+    """Default statistics to return upon a submission.
 
     ---
-    #### Members
-    - attempts 
-    - solves
-    - guesses
-    - greens
-    - yellows
-    - curr_streak
-    - max_streak
-    - total_letters
-    - avg_guesses
-    - green_rate
-    - yellow_rate
-
-    '''
-    def __init__(self, __raw:tuple):
-        _, attempts, solves, guesses, greens, yellows, curr_streak, max_streak, last_solve = __raw
-
-        self.attempts = attempts
-        self.solves = solves
-        self.guesses = guesses
-        self.greens = greens
-        self.yellows = yellows
-        self.curr_streak = curr_streak
-        self.max_streak = max_streak
+    - \# guesses distribution
+    - \# games played
+    - win %
+    - streak
+    - max streak"""
+    def __init__(self, guessDistribution: str, numGamesPlayed: int, winRate: float, streak: int, maxStreak: int) -> None:
+        self.guessDistribution = str(guessDistribution)
+        self.numGamesPlayed = int(numGamesPlayed)
+        self.winRate = float(winRate)
+        self.streak = int(streak)
+        self.maxStreak = int(maxStreak)
         
-        _total_letters = guesses * LTRS_IN_GUESS
-        self.total_letters = _total_letters
+class UpdateValues:
+    def __init__(self, raw:Tuple, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> None:
+        # extract fields from tuple
+        _games, _wins, _guesses, _greens, _yellows, _uniques, _distro_str, _last_solve, _curr_streak, _max_streak = raw
 
-        self.avg_guesses = guesses / attempts
 
-        self.green_rate = (greens / _total_letters) * 100
-        self.yellow_rate = (yellows / _total_letters) * 100
+        # games update value
+        self._games_update = _games + 1
 
-    def __str__(self) -> str:
-        return f'''
-        attempts = {self.attempts}
-        solves = {self.solves}
-        guesses = {self.guesses}
-        average guesses = {self.avg_guesses}
-        greens = {self.greens}
-        yellows = {self.yellows}
-        current streak = {self.curr_streak}
-        max streak = {self.max_streak}
-        total letters = {self.total_letters}
-        green rate = {self.green_rate}
-        yellow rate = {self.yellow_rate}
-        '''
+        # wins update value
+        self._wins_update = _wins + win
+
+        # guesses update value
+        self._guesses_update = _guesses + guesses
+
+        # greens update value
+        self._greens_update = _greens + greens
+
+        # yellows update value
+        self._yellows_update = _yellows + yellows
+
+        # uniques update value
+        self._uniques_update = _uniques + uniques
+
+        # increment streak if user has solved consecutively; otherwise streak will not be incremented
+        _continue_streak = (date - _last_solve) == 1 
+
+        # last solve is set to current date if wordle solved; otherwise last solve stays the same
+        self._last_solve_update = date if win else _last_solve
+
+
+        # increment streak 
+        if win and _continue_streak:
+            self._streak_update = _curr_streak + 1
         
+        # set streak to 1 if this is the start of a new streak
+        elif win:
+            self._streak_update = 1
+
+        # set streka to 0 if user did not solve wordle today
+        else:
+            self._streak_update = 0
+
+
+        # set max streak accordingly
+        self._max_update = self._streak_update if self._streak_update > _max_streak else _max_streak
+
+
+        # if they win, update the guess distribution
+        if win:
+            # convert string to dictionary
+            temp_dict = dict( (k,v) for k,v in zip(range(1,7), map(int, _distro_str.split())))
+
+            # update dictionary
+            temp_dict[guesses] += 1
+
+            # convert dictionary back to string
+            self._distro_str_update = ' '.join(map(str, temp_dict.values()))
+            
+        # otherwise it stays the same
+        else:
+            self._distro_str_update = _distro_str
+
+
+
+        # win rate update value
+        self._win_rate_update = self._wins_update / self._games_update
+
+        # avg guesses update value
+        self._avg_guesses_update = self._guesses_update / self._games_update
+
+        # green rate update value
+        self._green_rate_update = self._greens_update / self._uniques_update
+
+        # yellow rate update value 
+        self._yellow_rate_update = self._yellows_update / self._uniques_update
 
 class DoubleSubmit(Exception):
     '''Exception raised if user attempts to submit twice on the same day'''
@@ -126,13 +165,7 @@ class BotDatabase:
                 green_rate float,
                 yellow_rate float,
                 FOREIGN KEY (username) REFERENCES User_Data(username)
-                );
-
-            CREATE TRIGGER Update_Max AFTER UPDATE ON User_Data
-                BEGIN
-                UPDATE User_Data SET max_streak = curr_streak 
-                WHERE username = NEW.username AND curr_streak > max_streak;
-                END;''')
+                );''')
             
             # close the cursor
             _cur.close()
@@ -144,159 +177,35 @@ class BotDatabase:
         # close connection to database
         self._database.close()
 
-    def get_user_stats(self, username:str) -> UserStats:
-        '''
-        Method returns the stats on the specified user
-        Stats returned: 
-        '''
-        # initialize cursor
-        _cur = self._database.cursor()
-
-        # get user data from the database
-        _raw = _cur.execute(f'''SELECT * FROM User_Data WHERE username = '{username}';''').fetchone()
-        
-        # close the cursor
-        _cur.close()
-
-        # initialize UserStats object with values from database
-        user_stats = UserStats(_raw)
-
-        # return UserStats object
-        return user_stats
-
-    def _get_update_values(self, raw:Tuple, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int):
-        
-        # extract fields from tuple
-        _games, _wins, _guesses, _greens, _yellows, _uniques, _distro_str, _last_solve, _curr_streak = raw
-
-
-
-        # games update value
-        _games_update = _games + 1
-
-        # wins update value
-        _wins_update = _wins + win
-
-        # guesses update value
-        _guesses_update = _guesses + guesses
-
-        # greens update value
-        _greens_update = _greens + greens
-
-        # yellows update value
-        _yellows_update = _yellows + yellows
-
-        # uniques update value
-        _uniques_update = _uniques + uniques
-
-        # increment streak if user has solved consecutively; otherwise streak will not be incremented
-        _continue_streak = (date - _last_solve) == 1 
-
-        # last solve is set to current date if wordle solved; otherwise last solve stays the same
-        _last_solve_update = date if win else _last_solve
-
-
-
-        # increment streak 
-        if win and _continue_streak:
-            _streak_update = _curr_streak + 1
-        
-        # set streak to 1 if this is the start of a new streak
-        elif win:
-            _streak_update = 1
-
-        # set streka to 0 if user did not solve wordle today
-        else:
-            _streak_update = 0
-
-
-
-        # if they win, update the guess distribution
-        if win:
-            # convert string to dictionary
-            temp_dict = dict( (k,v) for k,v in zip(range(1,7), map(int, _distro_str.split())))
-
-            # update dictionary
-            temp_dict[guesses] += 1
-
-            # convert dictionary back to string
-            _distro_str_update = ' '.join(map(str, temp_dict.values()))
-            
-        # otherwise it stays the same
-        else:
-            _distro_str_update = _distro_str
-
-
-
-        # win rate update value
-        _win_rate_update = _wins_update / _games_update
-
-        # avg guesses update value
-        _avg_guesses_update = _guesses_update / _games_update
-
-        # green rate update value
-        _green_rate_update = _greens_update / _uniques_update
-
-        # yellow rate update value 
-        _yellow_rate_update = _yellows_update / _uniques_update
-
-
-
-        # return computed values
-        return _games_update, \
-        _wins_update, \
-        _guesses_update, \
-        _greens_update, \
-        _yellows_update, \
-        _uniques_update, \
-        _last_solve_update, \
-        _streak_update, \
-        _distro_str_update, \
-        _win_rate_update, \
-        _avg_guesses_update, \
-        _green_rate_update, \
-        _yellow_rate_update
-
-    def _update_user(self, username:str, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> None:
+    def _update_user(self, username:str, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> BaseStats:
 
         # initialize cursor
         _cur = self._database.cursor()
 
         # get fields needed calculate stats for this user
-        _raw = _cur.execute(f"SELECT games, wins, guesses, greens, yellows, uniques, guess_distro, last_solve, curr_streak FROM User_Data WHERE username = '{username}';").fetchone()
-        
-        # get update values for wins, streak, last_solve, and guess distribution
-        _games_update, \
-        _wins_update, \
-        _guesses_update, \
-        _greens_update, \
-        _yellows_update, \
-        _uniques_update, \
-        _last_solve_update, \
-        _streak_update, \
-        _distro_str_update, \
-        _win_rate_update, \
-        _avg_guesses_update, \
-        _green_rate_update, \
-        _yellow_rate_update = self._get_update_values(_raw, win, guesses, greens, yellows, uniques, date)
+        _raw = _cur.execute(f"SELECT games, wins, guesses, greens, yellows, uniques, guess_distro, last_solve, curr_streak, max_streak FROM User_Data WHERE username = '{username}';").fetchone()
+                
+        # create update values object
+        vals = UpdateValues(_raw, win, guesses, greens, yellows, uniques, date)
 
         # execute sql script to update data in database for this user
         _cur.executescript(f'''
-            UPDATE User_Data SET games = {_games_update} WHERE username = '{username}';
-            UPDATE User_Data SET wins = {_wins_update} WHERE username = '{username}';
-            UPDATE User_Data SET guesses = {_guesses_update} WHERE username = '{username}';
-            UPDATE User_Data SET greens = {_greens_update} WHERE username = '{username}';
-            UPDATE User_Data SET yellows = {_yellows_update} WHERE username = '{username}';
-            UPDATE User_Data SET uniques = {_uniques_update} WHERE username = '{username}';
-            UPDATE User_Data SET guess_distro = '{_distro_str_update}' WHERE username = '{username}';
-            UPDATE User_Data SET last_solve = {_last_solve_update} WHERE username = '{username}';
-            UPDATE User_Data SET curr_streak = {_streak_update} WHERE username = '{username}';
+            UPDATE User_Data SET games = {vals._games_update} WHERE username = '{username}';
+            UPDATE User_Data SET wins = {vals._wins_update} WHERE username = '{username}';
+            UPDATE User_Data SET guesses = {vals._guesses_update} WHERE username = '{username}';
+            UPDATE User_Data SET greens = {vals._greens_update} WHERE username = '{username}';
+            UPDATE User_Data SET yellows = {vals._yellows_update} WHERE username = '{username}';
+            UPDATE User_Data SET uniques = {vals._uniques_update} WHERE username = '{username}';
+            UPDATE User_Data SET guess_distro = '{vals._distro_str_update}' WHERE username = '{username}';
+            UPDATE User_Data SET last_solve = {vals._last_solve_update} WHERE username = '{username}';
+            UPDATE User_Data SET curr_streak = {vals._streak_update} WHERE username = '{username}';
+            UPDATE User_Data SET max_streak = {vals._max_update} WHERE username = '{username}';
             UPDATE User_Data SET last_submit = {date} WHERE username = '{username}';
 
-            UPDATE User_Stats SET win_rate = {_win_rate_update} WHERE username = '{username}';
-            UPDATE User_Stats SET avg_guesses = {_avg_guesses_update} WHERE username = '{username}';
-            UPDATE User_Stats SET green_rate = {_green_rate_update} WHERE username = '{username}';
-            UPDATE User_Stats SET yellow_rate = {_yellow_rate_update} WHERE username = '{username}';''')
+            UPDATE User_Stats SET win_rate = {vals._win_rate_update} WHERE username = '{username}';
+            UPDATE User_Stats SET avg_guesses = {vals._avg_guesses_update} WHERE username = '{username}';
+            UPDATE User_Stats SET green_rate = {vals._green_rate_update} WHERE username = '{username}';
+            UPDATE User_Stats SET yellow_rate = {vals._yellow_rate_update} WHERE username = '{username}';''')
 
         # close cursor
         _cur.close()
@@ -304,6 +213,11 @@ class BotDatabase:
         # commit changes to the database
         self._database.commit()
 
+        # create BaseStats object to return
+        stats = BaseStats(vals._distro_str_update, vals._games_update, vals._win_rate_update, vals._streak_update, vals._max_update)
+
+        # return the stats object
+        return stats
 
     def _add_user(self, username:str, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> None:
         
@@ -389,11 +303,12 @@ class BotDatabase:
         # commit the changes to the database
         self._database.commit()
 
-        print('changes_committed')
+        stats = BaseStats(_distro_insert, _games_insert, _win_rate, _streak_insert, _streak_insert)
 
         # return the base_stats
+        return stats
 
-    def submit_data(self, username:str, dtime:datetime, win:bool, guesses:int, greens:int, yellows:int, uniques:int) -> None:
+    def submit_data(self, username:str, dtime:datetime, win:bool, guesses:int, greens:int, yellows:int, uniques:int) -> BaseStats:
         '''Given the username and info on attempt, user stats are updated in the database. A user is added to the database if
         they are a new user. Method will raise DoubleSubmit exception if method is called on the same user twice or more on one day'''
 
@@ -423,9 +338,9 @@ class BotDatabase:
             
             # if we get to this point the user is submitting for the first time on day: _date
             # update stats
-            self._update_user(username, win, guesses, greens, yellows, uniques, _date)
+            return self._update_user(username, win, guesses, greens, yellows, uniques, _date)
 
         # user does not exist in database
         else:
             # add the user to the database
-            self._add_user(username, win, guesses, greens, yellows, uniques, _date)
+            return self._add_user(username, win, guesses, greens, yellows, uniques, _date)
