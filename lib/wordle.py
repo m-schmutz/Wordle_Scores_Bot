@@ -18,8 +18,6 @@ import ansi
 from chimp import ChimpView
 from database import BaseStats, BotDatabase, DoubleSubmit
 
-from inspect import cleandoc
-
 def timer(func):
     def _inner(*args, **kwargs):
         beg = perf_counter()
@@ -137,7 +135,7 @@ class _imageProcessor:
 
         _, mask = cv2.threshold(grayscale, self._MAX_DARK, self._MAX_THRESH, cv2.THRESH_BINARY_INV)
         cell_contours = self._genCellContours(grayscale, darkTheme)
-        if len(cell_contours) != 30:
+        if len(cell_contours) % 5:
             raise UnidentifiableGame
 
         # squeeze letters horizontally
@@ -163,7 +161,7 @@ class _imageProcessor:
 
         return mask
 
-    def getGuesses(self, image: bytes) -> 'list[str]':
+    def getGuesses(self, image: bytes) -> np.ndarray:
         """Use Tesseract to convert a mask of the user's guesses into a list of strings."""
 
         # Convert Discord image (bytes) to OpenCV image (Mat)
@@ -176,26 +174,20 @@ class _imageProcessor:
             config= '--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ')
 
         # Convert raw string into list
-        return text.lower().strip().split('\n')
+        lst = text.lower().strip().split('\n')
+        arr = np.zeros(shape=(len(lst),5), dtype=str)
+        for row, guess in enumerate(lst):
+            for i, c in enumerate(guess):
+                arr[row,i] = c
+        return arr
 
 class _gameAnalyzer:
     def __init__(self) -> None:
         self._imgproc = _imageProcessor()
         self._scraper = _wotdScraper()
-        self._initGameData()
-
-    def _initGameData(self, guesses: list = [], wotd: str = ''):
-        self.guesses = guesses
-        self.numGuesses = len(guesses)
-        self.scores = []
-        self.numGreen = 0
-        self.numYellow = 0
-        self.wotd = wotd
-        self.defaultCounts = Counter(wotd)
-        self.defaultScore = [CharScore.INCORRECT] * 5
 
     # Assigns each character a CharScore.
-    def scoreGame(self, image: bytes, submissionDate: datetime) -> 'tuple[bool, int, int, int]':
+    def scoreGame(self, image: bytes, submissionDate: datetime) -> 'tuple[bool, int, int, int, int]':
         """Parse a screenshot of a Wordle game and return information about the game.
         
         ---
@@ -210,13 +202,20 @@ class _gameAnalyzer:
         ---
         ## Returns
 
-            self.solved : `bool` ,
+        self.solved : `bool` ,
+            True if the game was won. False otherwise.
 
-            self.numGuesses : `int` ,
+        self.numGuesses : `int` ,
+            The number of guesses taken.
 
-            self.numGreen : `int` ,
+        self.uniqueGreen : `int` ,
+            The number of unique correct letter positions.
 
-            self.numYellow : `int`
+        self.uniqueYellow : `int` ,
+            The number of unique misplaced letter positions.
+
+        self.numUnique : `int`
+            The number of unique letter positions.
 
         ---
         ## Raises
@@ -226,37 +225,52 @@ class _gameAnalyzer:
         """
 
         # Get user guesses and initialize game data
-        self._initGameData(
-            guesses= self._imgproc.getGuesses(image),
-            wotd= self._scraper.wotd(submissionDate))
+        self.guesses        = self._imgproc.getGuesses(image)
+        self.numGuesses, _  = self.guesses.shape
 
-        # Score each guess
-        for guess in self.guesses:
-            score = self.defaultScore.copy()
-            counts = self.defaultCounts.copy()
+        self.scores         = np.full(shape=self.guesses.shape, fill_value=CharScore.INCORRECT)
+        self.wotd           = self._scraper.wotd(submissionDate)
+        self.defaultCounts  = Counter(self.wotd)
+        self.defaultScore   = [CharScore.INCORRECT] * 5
+
+        self.uniqueGreen    = 0
+        self.uniqueYellow   = 0
+        self.numUnique      = sum(
+            len(set(self.guesses[:,col]))
+            for col in range(5))
+
+        uniques = [set(),set(),set(),set(),set()]
+        for row, guess in enumerate(self.guesses):
             remaining: list[tuple] = []
+            counts = self.defaultCounts.copy()
 
-            # Mark all correct characters
-            for i, gchar, wchar in zip(range(5), guess, self.wotd):
-                if gchar == wchar:
-                    score[i] = CharScore.CORRECT
-                    counts[wchar] -= 1
-                    self.numGreen += 1
+            # correct letters
+            for col, gc, wc in zip(range(5), guess, self.wotd):
+                if gc == wc:
+                    self.scores[row,col] = CharScore.CORRECT
+                    counts[gc] -= 1
+                    if gc not in uniques[col]:
+                        self.uniqueGreen += 1
+                        uniques[col].add(gc)
                 else:
-                    remaining.append((i, gchar))
+                    remaining.append( (row, col, gc) )
 
-            # Mark all misplaced characters
-            for i, gchar in remaining:
-                if gchar in self.wotd and counts[gchar] > 0:
-                    score[i] = CharScore.MISPLACED
-                    counts[gchar] -= 1
-                    self.numYellow += 1
+            # misplaced letters
+            for row, col, gc in remaining:
+                if gc in self.wotd and counts[gc] > 0:
+                    self.scores[row,col] = CharScore.MISPLACED
+                    counts[gc] -= 1
+                    if gc not in uniques[col]:
+                        self.uniqueYellow += 1
+                uniques[col].add(gc)
 
-            self.scores.append(score)
+        print(self.numUnique)
+        print(sum(len(us) for us in uniques))
+
         self.solved = all(s == CharScore.CORRECT for s in self.scores[-1])
+        # self.numUnique = sum(len(us) for us in uniques)
 
-        # -> (SOLVED bool, #GUESSES int, #GREEN int, #YELLOW int)
-        return (self.solved, self.numGuesses, self.numGreen, self.numYellow)
+        return (self.solved, self.numGuesses, self.uniqueGreen, self.uniqueYellow, self.numUnique)
 
 
 
