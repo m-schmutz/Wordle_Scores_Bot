@@ -63,17 +63,18 @@ class FullStats(BaseStats):
         super().__init__(distro_str, games_played, win_rate, streak, max_streak)
 
         # initialize the FullStats fields
-        self.total_wins = total_wins
-        self.total_guesses = total_guesses
-        self.total_greens = total_greens
-        self.total_yellows = total_yellows
-        self.uniques = uniques
-        self.avg_guesses = avg_guesses
-        self.green_rate = green_rate
-        self.yellow_rate = yellow_rate
+        self.total_wins = int(total_wins)
+        self.total_guesses = int(total_guesses)
+        self.total_greens = int(total_greens)
+        self.total_yellows = int(total_yellows)
+        self.uniques = int(uniques)
+        self.avg_guesses = float(avg_guesses)
+        self.green_rate = float(green_rate)
+        self.yellow_rate = float(yellow_rate)
         
 class UpdateValues:
     def __init__(self, raw:Tuple, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> None:
+        
         # extract fields from tuple
         _games, _wins, _guesses, _greens, _yellows, _uniques, _distro_str, _last_solve, _curr_streak, _max_streak = raw
 
@@ -134,7 +135,6 @@ class UpdateValues:
         # otherwise it stays the same
         else:
             self._distro_str_update = _distro_str
-
 
 
         # win rate update value
