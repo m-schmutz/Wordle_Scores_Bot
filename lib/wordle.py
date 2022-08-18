@@ -2,7 +2,7 @@ from typing import Optional
 import numpy as np
 import cv2
 import discord
-
+from discord import Intents, Object
 from discord.ext import commands
 from pytesseract import image_to_string
 from selenium import webdriver
@@ -12,11 +12,11 @@ from time import perf_counter
 from datetime import datetime
 from enum import Enum, auto
 from collections import Counter
-from random import choice, randint
+from random import choice
+from dataclasses import dataclass
 
 import ansi
-from chimp import ChimpView
-from database import BaseStats, BotDatabase, DoubleSubmit
+from database import BaseStats, BotDatabase
 
 def timer(func):
     def _inner(*args, **kwargs):
@@ -28,6 +28,17 @@ def timer(func):
     return _inner
 
 
+@dataclass
+class WordleGame:
+    guessTable: np.ndarray
+    numGuesses: int
+    solution: str
+    won: bool
+    uniqueCorrect: int
+    uniqueMisplaced: int
+    uniqueAll: int
+    totalCorrect: int
+    totalMisplaced: int
 
 class UnidentifiableGame(Exception):
     def __init__(self, *args: object) -> None:
@@ -63,9 +74,7 @@ class SubmissionReply(discord.Embed):
         self.add_field(name='Streak', value=stats.streak, inline=False)
         self.add_field(name='Max Streak', value=stats.maxStreak, inline=False)
 
-
-
-class _wotdScraper:
+class WebScraper:
     """Keeps track of the Word of the Day. Uses Selenium to scrape the NYTimes Wordle webpage."""
 
     def __init__(self) -> None:
@@ -104,20 +113,94 @@ class _wotdScraper:
 
         return self._wotd
 
-class _imageProcessor:
-    """Reads an image of a users Wordle game to obtain their guesses."""
+class WordleBot(commands.Bot):
+    def __init__(self, server_id: int) -> None:
+        super().__init__(
+            command_prefix= '!',
+            intents= Intents.all(),
+            help_command= None)
+        self.synced = False
+        self.guild = Object(id=server_id)
+        self.scraper = WebScraper()
+        self.db = BotDatabase(db_path='./lib/stats.db')
 
-    def __init__(self) -> None:
-        self._MAX_DARK = int(200)
-        self._MAX_THRESH = int(255)
+    ### Overridden methods
+    async def on_ready(self):
 
-    def _genCellContours(self, grayscale: cv2.Mat, darkTheme: bool) -> 'list[np.ndarray]':
+        # Wait for client cache to load
+        await self.wait_until_ready()
+
+        # Sync application commands
+        if not self.synced:
+            await self.tree.sync(guild=self.guild)
+            self.synced = True
+
+        print(f'{self.user} ready!')
+
+    ### Additional methods
+    def _getResponse(self, solved: bool, numGuesses: int, *argeater) -> str:
+        if solved:
+            if numGuesses == 1:
+                return choice((
+                    'Riiiiight. I\'m sure you didn\'t look it up.',
+                    'CHEATER!!!!'))
+
+            if numGuesses < 3:
+                return choice((
+                    'Damn that\'s crazy... I have google too.',
+                    'hmmmmmm 🤔🤔'))
+
+            if numGuesses < 5:
+                return choice((
+                    'Ok?',
+                    'Yea',
+                    'Cool.',
+                    'Yep, that\'s definitely a Wordle game.'))
+
+            return choice((
+                f'It took you {numGuesses} guesses? Lmao.',
+                'Garbage.',
+                'My grandma could do better.'))
+
+        return choice((
+            'You suck!',
+            'I\'d say better luck next time, but you clearly don\'t have any luck.',
+            'Maybe [this](https://freekidsbooks.org/reading-level/children/) can help you.'))
+
+    def _guessesFromImage(self, image: bytes) -> np.ndarray:
+        """Use Tesseract to convert a mask of the user's guesses into a list of strings.
+        
+        ---
+        ## Parameters
+
+        image : `bytes`
+            The user-provided screenshot of their Wordle game.
+
+        ---
+        ## Returns
+
+        object : `np.ndarry`
+            A 2-D array of the words within the image.
+
+        ---
+        ## Raises
+
+        UnidentifiableGame
+            Unable to find a game in the image."""
+
+        # Convert Discord image (bytes) to OpenCV image (Mat)
+        imageMat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+
+        grayscale = cv2.cvtColor(imageMat, cv2.COLOR_BGR2GRAY)
+        darkTheme = (np.median(grayscale[:1,:]) < 200)
+
         # Create and use the cell mask to find the cell contours.
-        if darkTheme:
-            _, cell_mask = cv2.threshold(grayscale, 30, self._MAX_THRESH, cv2.THRESH_BINARY)
-        else:
-            _, cell_mask = cv2.threshold(grayscale, self._MAX_DARK, self._MAX_THRESH, cv2.THRESH_BINARY_INV)
-        contours, _ = cv2.findContours(cell_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(
+            image= cv2.threshold(grayscale, 30, 255, cv2.THRESH_BINARY)[1]
+                if darkTheme
+                else cv2.threshold(grayscale, 200, 255, cv2.THRESH_BINARY_INV)[1],
+            mode= cv2.RETR_EXTERNAL,
+            method= cv2.CHAIN_APPROX_SIMPLE)
 
         # Remove non-quadrilaterals and non-squares
         filtered = []
@@ -135,21 +218,17 @@ class _imageProcessor:
         # Remove all axis of length one since they are useless. Additionally, reverse
         # the list since findContours works from SE to NW and we want our contours
         # organized from NW to SE (i.e. guess order).
-        return np.squeeze(filtered)[::-1]
+        cell_contours = np.squeeze(filtered)[::-1]
 
-    def _genMask(self, image: cv2.Mat) -> cv2.Mat:
-        grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        darkTheme = (np.median(grayscale[:1,:]) < self._MAX_DARK)
-
-        _, mask = cv2.threshold(grayscale, self._MAX_DARK, self._MAX_THRESH, cv2.THRESH_BINARY_INV)
-        cell_contours = self._genCellContours(grayscale, darkTheme)
         if len(cell_contours) % 5:
             raise UnidentifiableGame
+
+        _, mask = cv2.threshold(grayscale, 200, 255, cv2.THRESH_BINARY_INV)
 
         # squeeze letters horizontally
         cols = []
         for c in cell_contours[:5]:
-            x,_,w,_ = cv2.boundingRect(c)
+            x,y,w,_ = cv2.boundingRect(c)
             off = w // 4
             cols.append(mask[:, x+off : x+w-off])
         mask: cv2.Mat = cv2.hconcat(cols)
@@ -160,24 +239,17 @@ class _imageProcessor:
             for contour in cell_contours
             for (_, y) in contour)
         mask: np.ndarray = mask[min(ys):max(ys), :]
+        print(len(ys), ys)
 
         # potentially fill empty horizontal strips
         if not darkTheme:
             for i in range(mask.shape[0]):
                 if all(mask[i,:] == 0):
-                    mask[i,:] = self._MAX_THRESH
-
-        return mask
-
-    def getGuesses(self, image: bytes) -> np.ndarray:
-        """Use Tesseract to convert a mask of the user's guesses into a list of strings."""
-
-        # Convert Discord image (bytes) to OpenCV image (Mat)
-        mat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+                    mask[i,:] = 255
 
         # Generate mask and feed Tesseract :) *pat* *pat* good boy
         text = image_to_string(
-            image= self._genMask(mat),
+            image= mask,
             lang= "eng",
             config= '--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ')
 
@@ -189,15 +261,9 @@ class _imageProcessor:
                 arr[row,i] = c
         return arr
 
-# this probably doesn't need to be a class
-class _gameAnalyzer:
-    def __init__(self) -> None:
-        self._imgproc = _imageProcessor()
-        self._scraper = _wotdScraper()
-
-    # Assigns each character a CharScore.
-    def scoreGame(self, image: bytes, submissionDate: datetime) -> 'tuple[bool, int, int, int, int]':
-        """Parse a screenshot of a Wordle game and return information about the game.
+    def scoreGame(self, image: bytes, submissionDate: datetime) -> WordleGame:
+        """Parse a screenshot of a Wordle game and return a WordleGame object containing
+        information about the results.
         
         ---
         ## Parameters
@@ -211,49 +277,27 @@ class _gameAnalyzer:
         ---
         ## Returns
 
-        self.solved : `bool` ,
-            True if the game was won. False otherwise.
-
-        self.numGuesses : `int` ,
-            The number of guesses taken.
-
-        self.uniqueCorrect : `int` ,
-            The number of unique correct letter positions.
-
-        self.uniqueMisplaced : `int` ,
-            The number of unique misplaced letter positions.
-
-        self.uniqueAll : `int`
-            The number of unique letter positions.
-
-        ---
-        ## Raises
-
-        UnidentifiableGame
-            Unable to find a game in the image.
+        object : `WordleGame`
+            DTO for easy use of various game stats.
         """
 
-        # Get user guesses and initialize game data
-        self.guesses        = self._imgproc.getGuesses(image)
-        self.numGuesses, _  = self.guesses.shape
-        self.wotd           = self._scraper.wotd(submissionDate)
-        self._counts        = Counter(self.wotd)
-
-        # Score the game
-        # it's easier to score yellows after greens instead of scoring them
-        # "inline". otherwise, we would have to look ahead for potential
-        # greens because green has a higher precedence and therefore consumes
-        # one count of itself before any would-be yellows have the chance.
-        scores = np.full(shape=self.guesses.shape, fill_value=CharScore.INCORRECT)
-        uniques = [set(),set(),set(),set(),set()]
+        # Get user guesses and initialize game data, then score the game.
+        # It's easier to score yellows after greens as opposed to "inline". Otherwise,
+        #   we would have to look ahead for potential greens because green has a higher
+        #   precedence and therefore consumes one of the characters counts before any
+        #   would-be yellows have the chance.
+        guesses = self._guessesFromImage(image)
+        wotd = self.scraper.wotd(submissionDate)
+        counts = Counter(wotd)
+        scores = np.full(shape=guesses.shape, fill_value=CharScore.INCORRECT)
+        uniques = [set() for _ in range(5)]
         tC = tM = uC = uM = 0
-
-        for row, guess in enumerate(self.guesses):
+        for row, guess in enumerate(guesses):
             remaining: list[tuple] = []
-            counts: Counter = self._counts.copy()
+            counts: Counter = counts.copy()
 
             # score CORRECT LETTERS in CORRECT POSITION (Green)
-            for col, gc, wc in zip(range(5), guess, self.wotd):
+            for col, gc, wc in zip(range(5), guess, wotd):
                 if gc == wc:
                     scores[row,col] = CharScore.CORRECT
                     counts[gc] -= 1
@@ -268,7 +312,7 @@ class _gameAnalyzer:
 
             # score CORRECT LETTERS in WRONG POSITION (Yellow)
             for row, col, gc in remaining:
-                if gc in self.wotd and counts[gc] > 0:
+                if gc in wotd and counts[gc] > 0:
                     scores[row,col] = CharScore.MISPLACED
                     counts[gc] -= 1
                     tM += 1
@@ -278,11 +322,13 @@ class _gameAnalyzer:
                 #(2/2) ...finish adding unique chars
                 uniques[col].add(gc)
 
-        self.scores             = scores
-        self.solved             = all(s == CharScore.CORRECT for s in scores[-1])
-        self.totalCorrect       = tC
-        self.totalMisplaced     = tM
-        self.uniqueCorrect      = uC
-        self.uniqueMisplaced    = uM
-        self.uniqueAll          = sum(len(us) for us in uniques)
-        return (self.solved, self.numGuesses, uC, uM) #tC, tM, self.uniqueAll
+        return WordleGame(
+            guessTable= guesses,
+            numGuesses= guesses.shape[0],
+            solution= wotd,
+            won= all(s == CharScore.CORRECT for s in scores[-1]),
+            uniqueCorrect= uC,
+            uniqueMisplaced= uM,
+            uniqueAll= sum(len(set) for set in uniques),
+            totalCorrect= tC,
+            totalMisplaced= tM)

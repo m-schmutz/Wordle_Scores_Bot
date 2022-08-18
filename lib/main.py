@@ -1,90 +1,58 @@
-from random import choice, randint
-from discord import Intents, Object, Interaction, Attachment, ButtonStyle, app_commands
-from discord.ui import Button, View
-from discord.ext import commands
-
-from chimp import ChimpView
-from database import BotDatabase, DoubleSubmit
-from wordle import SubmissionReply, UnidentifiableGame, _gameAnalyzer
+from random import randint
 from credentials import bot_token, server_id
-
-class WordleBot(commands.Bot):
-    def __init__(self) -> None:
-        super().__init__(
-            command_prefix= '!',
-            intents= Intents.all(),
-            help_command= None)
-        self.synced = False
-        self.guild = Object(id=server_id)
-
-    async def on_ready(self):
-        await self.wait_until_ready()
-        if not self.synced:
-            await self.tree.sync(guild=self.guild)
-            self.synced = True
-
-        print(f'\'{self.user}\' logged in and ready!')
-
-    def getResponse(self, solved: bool, numGuesses: int, *argeater) -> str:
-        if solved:
-            if numGuesses < 3:
-                return choice(['damn that\'s crazy.. i have google too 🙄', 'suuuuuuuure\nyou just *knew* it right? 🤔'])
-            
-            if numGuesses < 5:
-                return choice(['ok?', 'yea', 'cool', 'yep', 'that\'s definitely a game'])
-
-            return choice([f'it actually took you {numGuesses} guess{"es" if numGuesses > 1 else ""}. lmao.', 'garbage'])
-        return choice(['you suck!', 'better luck next time idiot'])
-
-
+from discord import Interaction, Attachment, ButtonStyle, app_commands
+from discord.ui import Button, View
+from chimp import ChimpView
+from database import DoubleSubmit
+from wordle import SubmissionReply, UnidentifiableGame, WordleBot
 
 def main() -> None:
-    ga = _gameAnalyzer()
-    db = BotDatabase(db_path='./lib/stats.db')
-    bot = WordleBot()
+    bot = WordleBot(server_id)
 
     ### Discord Bot Application Commands
-    @bot.tree.command(name= 'submit',
+    @bot.tree.command(name='submit',
         description= 'Submit a screenshot of your Wordle game!',
         guild= bot.guild)
     async def _(interaction: Interaction, image: Attachment):
-        # Shhhhhhhhhhhh we'll get there, Discord...
-        await interaction.response.defer()
+
+        # Grab date of submission.
         date = interaction.created_at.astimezone().date()
 
-        # Find the game and score it
+        # Attempt to score the game.
+        # If it cannot be scored, reply accordingly.
         try:
-            results = ga.scoreGame(await image.read(), date)
+            gameResults = bot.scoreGame(await image.read(), date)
         except UnidentifiableGame as e:
-            await interaction.followup.send(content=e.message, ephemeral=True)
+            await interaction.response.send_message(content=e.message, ephemeral=True)
             return
 
-        # Submit to database
+        # Attempt to submit scores to database.
+        # If the user has already submit today's game, reply accordingly.
         try:
-            stats = db.submit_data(str(interaction.user), date, *results)
+            baseStats = bot.db.submit_data(str(interaction.user), date, *gameResults)
         except DoubleSubmit as e:
-            await interaction.followup.send(content=e.message, ephemeral=True)
+            await interaction.response.send_message(content=e.message, ephemeral=True)
             return
 
         # Reply with stats
-        await interaction.followup.send(
+        await interaction.response.send_message(
             embed= SubmissionReply(
                 username= interaction.user.name,
-                stats= stats),
+                stats= baseStats),
             file= await image.to_file(spoiler=True))
 
         await interaction.followup.send(
-            content= bot.getResponse(*results),
+            content= bot._getResponse(*gameResults),
             ephemeral= True)
 
-    @bot.tree.command(name= 'chimp',
+    @bot.tree.command(name='chimp',
         description= 'Are you smarter than a chimp? Play this quick memorization game to find out!',
         guild= bot.guild)
     async def _(interaction: Interaction):
         chimp = ChimpView()
         await interaction.response.send_message(view=chimp)
 
-    @bot.tree.command(name= 'link',
+    @bot.tree.command(name='link',
         description= 'Get the link to the Wordle webpage.',
         guild= bot.guild)
     async def _(interaction: Interaction):
@@ -102,6 +70,7 @@ def main() -> None:
     async def _(interaction: Interaction, faces: app_commands.Range[int, 2, None]):
         await interaction.response.send_message(f'You rolled a {randint(1, faces)}!')
 
+    ### Start the bot
     bot.run(bot_token)
 
 if __name__ == '__main__':
