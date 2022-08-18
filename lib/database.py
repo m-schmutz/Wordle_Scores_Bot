@@ -52,6 +52,7 @@ class FullStats(BaseStats):
         total_yellows, \
         uniques, \
         distro_str, \
+        last_win, \
         streak, \
         max_streak, \
         win_rate, \
@@ -71,12 +72,13 @@ class FullStats(BaseStats):
         self.avg_guesses = float(avg_guesses)
         self.green_rate = float(green_rate)
         self.yellow_rate = float(yellow_rate)
+        self.last_win = datetime.strptime(str(last_win), '%Y%m%d').date()
         
 class UpdateValues:
     def __init__(self, raw:Tuple, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> None:
         
         # extract fields from tuple
-        _games, _wins, _guesses, _greens, _yellows, _uniques, _distro_str, _last_solve, _curr_streak, _max_streak = raw
+        _games, _wins, _guesses, _greens, _yellows, _uniques, _distro_str, _last_win, _curr_streak, _max_streak = raw
 
 
         # games update value
@@ -98,10 +100,10 @@ class UpdateValues:
         self._uniques_update = _uniques + uniques
 
         # increment streak if user has solved consecutively; otherwise streak will not be incremented
-        _continue_streak = (date - _last_solve) == 1 
+        _continue_streak = (date - _last_win) == 1 
 
         # last solve is set to current date if wordle solved; otherwise last solve stays the same
-        self._last_solve_update = date if win else _last_solve
+        self._last_win_update = date if win else _last_win
 
 
         # increment streak 
@@ -200,7 +202,7 @@ class BotDatabase:
                 yellows int, 
                 uniques int, 
                 guess_distro varchar, 
-                last_solve int, 
+                last_win int, 
                 last_submit int, 
                 curr_streak int, 
                 max_streak int, 
@@ -239,7 +241,7 @@ class BotDatabase:
                                        yellows, 
                                        uniques, 
                                        guess_distro, 
-                                       last_solve, 
+                                       last_win, 
                                        curr_streak, 
                                        max_streak FROM User_Data WHERE username = '{username}';''').fetchone()
                 
@@ -255,7 +257,7 @@ class BotDatabase:
             UPDATE User_Data SET yellows = {vals._yellows_update} WHERE username = '{username}';
             UPDATE User_Data SET uniques = {vals._uniques_update} WHERE username = '{username}';
             UPDATE User_Data SET guess_distro = '{vals._distro_str_update}' WHERE username = '{username}';
-            UPDATE User_Data SET last_solve = {vals._last_solve_update} WHERE username = '{username}';
+            UPDATE User_Data SET last_win = {vals._last_win_update} WHERE username = '{username}';
             UPDATE User_Data SET curr_streak = {vals._streak_update} WHERE username = '{username}';
             UPDATE User_Data SET max_streak = {vals._max_update} WHERE username = '{username}';
             UPDATE User_Data SET last_submit = {date} WHERE username = '{username}';
@@ -321,7 +323,7 @@ class BotDatabase:
                 yellows,
                 uniques, 
                 guess_distro,
-                last_solve,
+                last_win,
                 last_submit,
                 curr_streak, 
                 max_streak) 
@@ -411,6 +413,7 @@ class BotDatabase:
                                        yellows, 
                                        uniques, 
                                        guess_distro,
+                                       last_win,
                                        curr_streak, 
                                        max_streak,
                                        win_rate, 

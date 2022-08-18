@@ -8,3 +8,6 @@ lib/playground.py
 lib/wotd.txt
 lib/*.db
 lib/wordle_pickles/
+test.py
+runningavg.py
+*.db
