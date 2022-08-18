@@ -21,7 +21,7 @@ def main() -> None:
         # Attempt to score the game.
         # If it cannot be scored, reply accordingly.
         try:
-            gameResults = bot.scoreGame(await image.read(), date)
+            game = bot.scoreGame(await image.read(), date)
         except UnidentifiableGame as e:
             await interaction.response.send_message(content=e.message, ephemeral=True)
             return
@@ -29,7 +29,14 @@ def main() -> None:
         # Attempt to submit scores to database.
         # If the user has already submit today's game, reply accordingly.
         try:
-            baseStats = bot.db.submit_data(str(interaction.user), date, *gameResults)
+            baseStats = bot.db.submit_data(
+                username= str(interaction.user),
+                dtime= date,
+                win= game.won,
+                guesses= game.numGuesses,
+                greens= game.uniqueCorrect,
+                yellows= game.uniqueMisplaced,
+                uniques= game.uniqueAll)
         except DoubleSubmit as e:
             await interaction.response.send_message(content=e.message, ephemeral=True)
             return
@@ -42,7 +49,9 @@ def main() -> None:
             file= await image.to_file(spoiler=True))
 
         await interaction.followup.send(
-            content= bot._getResponse(*gameResults),
+            content= bot.getResponse(
+                solved= game.won,
+                numGuesses= game.numGuesses),
             ephemeral= True)
 
     @bot.tree.command(name='chimp',

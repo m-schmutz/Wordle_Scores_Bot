@@ -30,6 +30,8 @@ def timer(func):
 
 @dataclass
 class WordleGame:
+    """DTO"""
+
     guessTable: np.ndarray
     numGuesses: int
     solution: str
@@ -60,7 +62,7 @@ class CharScore(Enum):
         return ansi.bright_black(char)
 
 class SubmissionReply(discord.Embed):
-    def __init__(self, *, username: str, stats: BaseStats, description: Optional[str] = None, timestamp: Optional[datetime] = None):
+    def __init__(self, username: str, stats: BaseStats, description: Optional[str] = None, timestamp: Optional[datetime] = None):
         super().__init__(
             color= discord.Color.random(),
             title= f'>>> Results for {username}',
@@ -68,11 +70,11 @@ class SubmissionReply(discord.Embed):
             timestamp= timestamp)
 
         # self.set_image(url='https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fimgc.allpostersimages.com%2Fimg%2Fposters%2Fsteve-buscemi-smiling-in-close-up-portrait_u-L-Q1171600.jpg%3Fh%3D550%26p%3D0%26w%3D550%26background%3Dffffff&f=1&nofb=1')
-        self.add_field(name='Guess Distribution', value=stats.guessDistribution, inline=False)
-        self.add_field(name='Games Played', value=stats.numGamesPlayed, inline=False)
-        self.add_field(name='Win Rate', value=f'{stats.winRate:.02f}%', inline=False)
+        self.add_field(name='Guess Distribution', value=stats.guess_distro, inline=False)
+        self.add_field(name='Games Played', value=stats.games_played, inline=False)
+        self.add_field(name='Win Rate', value=f'{stats.win_rate:.02f}%', inline=False)
         self.add_field(name='Streak', value=stats.streak, inline=False)
-        self.add_field(name='Max Streak', value=stats.maxStreak, inline=False)
+        self.add_field(name='Max Streak', value=stats.max_streak, inline=False)
 
 class WebScraper:
     """Keeps track of the Word of the Day. Uses Selenium to scrape the NYTimes Wordle webpage."""
@@ -138,35 +140,6 @@ class WordleBot(commands.Bot):
         print(f'{self.user} ready!')
 
     ### Additional methods
-    def _getResponse(self, solved: bool, numGuesses: int, *argeater) -> str:
-        if solved:
-            if numGuesses == 1:
-                return choice((
-                    'Riiiiight. I\'m sure you didn\'t look it up.',
-                    'CHEATER!!!!'))
-
-            if numGuesses < 3:
-                return choice((
-                    'Damn that\'s crazy... I have google too.',
-                    'hmmmmmm 🤔🤔'))
-
-            if numGuesses < 5:
-                return choice((
-                    'Ok?',
-                    'Yea',
-                    'Cool.',
-                    'Yep, that\'s definitely a Wordle game.'))
-
-            return choice((
-                f'It took you {numGuesses} guesses? Lmao.',
-                'Garbage.',
-                'My grandma could do better.'))
-
-        return choice((
-            'You suck!',
-            'I\'d say better luck next time, but you clearly don\'t have any luck.',
-            'Maybe [this](https://freekidsbooks.org/reading-level/children/) can help you.'))
-
     def _guessesFromImage(self, image: bytes) -> np.ndarray:
         """Use Tesseract to convert a mask of the user's guesses into a list of strings.
         
@@ -260,6 +233,35 @@ class WordleBot(commands.Bot):
             for i, c in enumerate(guess):
                 arr[row,i] = c
         return arr
+
+    def getResponse(self, solved: bool, numGuesses: int) -> str:
+        if solved:
+            if numGuesses == 1:
+                return choice((
+                    'Riiiiight. I\'m sure you didn\'t look it up.',
+                    'CHEATER!!!!'))
+
+            if numGuesses < 3:
+                return choice((
+                    'Damn that\'s crazy... I have google too.',
+                    'hmmmmmm 🤔🤔'))
+
+            if numGuesses < 5:
+                return choice((
+                    'Ok?',
+                    'Yea',
+                    'Cool.',
+                    'Yep, that\'s definitely a Wordle game.'))
+
+            return choice((
+                f'It took you {numGuesses} guesses? Lmao.',
+                'Garbage.',
+                'My grandma could do better.'))
+
+        return choice((
+            'You suck!',
+            'I\'d say better luck next time, but you clearly don\'t have any luck.',
+            'Maybe [this](https://freekidsbooks.org/reading-level/children/) can help you.'))
 
     def scoreGame(self, image: bytes, submissionDate: datetime) -> WordleGame:
         """Parse a screenshot of a Wordle game and return a WordleGame object containing
