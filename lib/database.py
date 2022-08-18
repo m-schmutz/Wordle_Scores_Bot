@@ -361,7 +361,7 @@ class BotDatabase:
         return BaseStats(_distro_insert, _games_insert, _win_rate, _streak_insert, _streak_insert)
 
     def submit_data(self, username:str, dtime:datetime, win:bool, guesses:int, greens:int, yellows:int, uniques:int) -> BaseStats:
-        '''Given the username and info on attempt, user stats are updated in the database. A user is added to the database if
+        '''Given the username and info on game submission, user stats are updated in the database and their BaseStats are returned. A user is added to the database if
         they are a new user. Method will raise DoubleSubmit exception if method is called on the same user twice or more on one day'''
 
         # convert datetime object to int of form YYYYMMDD
@@ -398,7 +398,8 @@ class BotDatabase:
             return self._add_user(username, win, guesses, greens, yellows, uniques, _date)
 
     def get_full_stats(self, username:str) -> FullStats:
-        #initialize cursor
+        
+        # initialize cursor
         _cur = self._database.cursor()
 
         # get all data fields for the specified user
