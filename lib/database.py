@@ -18,7 +18,7 @@ class BaseStats:
     - streak
     - max streak"""
     def __init__(self, distro_str:str, games_played:int, win_rate:float, streak:int, max_streak:int) -> None:
-        self.guess_distro = str(distro_str)
+        self.guess_distro = dict( (k,v) for k,v in zip(range(1,7), map(int, distro_str.split())))
         self.games_played = int(games_played)
         self.win_rate = float(win_rate)
         self.streak = int(streak)
@@ -35,6 +35,7 @@ class FullStats(BaseStats):
     - \# total yellows
     - \# uniques
     - guesses distribution
+    - last_win
     - current streak
     - max streak
     - win rate
@@ -421,5 +422,8 @@ class BotDatabase:
                                        green_rate, 
                                        yellow_rate FROM User_Data CROSS JOIN User_Stats WHERE User_Data.username = '{username}';''').fetchone()
         
+        # close the cursor
+        _cur.close()
+
         # return FullStats object
         return FullStats(_raw)
