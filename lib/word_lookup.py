@@ -1,5 +1,5 @@
 from typing import Tuple, Union
-from .wordle import _wotdScraper
+from .wordle import WebScraper
 from datetime import datetime, timedelta
 import requests
 import re
@@ -37,7 +37,7 @@ def get_word_banks() -> Tuple[list, list]:
 
 def get_wotd() -> str:
     # create a wotd_scraper object. This will get the wotd on creation
-    scraper = _wotdScraper()
+    scraper = WebScraper()
 
     # return the word of the day 
     return scraper._wotd
@@ -219,13 +219,24 @@ def store_w_to_d(w_to_d:dict) -> str:
 
 
 def store_valid_words(valid_words:list):
-    # prefix for pkl file containing reverse dictionary
+    # prefix for pkl file containing valid words list
     file_prefix = 'valid_words'
 
     # store the pickled object
     pkl_object(valid_words, file_prefix)
 
     # return the file_prefix
+    return file_prefix
+
+
+def store_wordle_list(word_order:list):
+    # prefix for pkl file containing wordle_order list
+    file_prefix = 'word_order'
+
+    # store the pickled object
+    pkl_object(word_order, file_prefix)
+
+    # return the file prefix
     return file_prefix
 
 
@@ -242,6 +253,9 @@ def gen_files():
     # initialize registry list. This will store the prefixes of files so that
     # class can determine if needed files exist or not
     registry_list = list()
+
+    # store the word_order list to files and add file prefixes to registry list
+    registry_list.append(store_wordle_list(word_order))
 
     # store the d_to_w dictionary to files and add file prefixes to registry list
     registry_list.extend(store_d_to_w(d_to_w))
@@ -294,3 +308,12 @@ class WordLookup:
 
         # return the list
         return valid_words
+
+
+    def get_word_index(self, word:str) -> int:
+        '''Takes in a word and returns the index of the word in the word_order list'''
+        # load the word_order list form the pickle file
+        word_order = load_object('word_order')
+
+        # return the index of the word
+        return word_order.index(word)
