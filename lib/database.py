@@ -155,6 +155,7 @@ class DoubleSubmit(Exception):
     # takes in username to print out whihc user is attempting to submit twice 
     def __init__(self, username) -> None:
         self.username = username    
+        self.message = 'You already submit today\'s game :)'
 
     # set __module__ to exception module (nice print out message)
     ## this can be taken out later
