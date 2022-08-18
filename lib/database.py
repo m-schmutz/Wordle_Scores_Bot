@@ -1,126 +1,160 @@
 import sqlite3 as sql
 from datetime import datetime
 from os import path
+from typing import Tuple
 
 LTRS_IN_GUESS = 5
 
 # set DEBUG to True if you want to ignore double submits
 DEBUG = False
 
+
 class BaseStats:
     """Default statistics to return upon a submission.
 
     ---
-    - \# guesses distribution
+    - guesses distribution
     - \# games played
     - win %
     - streak
     - max streak"""
-    def __init__(self, guessDistribution: str, numGamesPlayed: int, winRate: float, streak: int, maxStreak: int) -> None:
-        self.guessDistribution = str(guessDistribution)
-        self.numGamesPlayed = int(numGamesPlayed)
-        self.winRate = float(winRate)
+    def __init__(self, distro_str:str, games_played:int, win_rate:float, streak:int, max_streak:int) -> None:
+        self.guess_distro = dict( (k,v) for k,v in zip(range(1,7), map(int, distro_str.split())))
+        self.games_played = int(games_played)
+        self.win_rate = float(win_rate)
         self.streak = int(streak)
-        self.maxStreak = int(maxStreak)
-
-class UserStats:
-    '''
-    Object to contain user stats returned from the database
-
-    ---
-    #### Members
-    - attempts 
-    - solves
-    - guesses
-    - greens
-    - yellows
-    - curr_streak
-    - max_streak
-    - total_letters
-    - avg_guesses
-    - green_rate
-    - yellow_rate
-
-    '''
-    def __init__(self, __raw:tuple):
-        _, attempts, solves, guesses, greens, yellows, curr_streak, max_streak, last_solve = __raw
-
-        self.attempts = attempts
-        self.solves = solves
-        self.guesses = guesses
-        self.greens = greens
-        self.yellows = yellows
-        self.curr_streak = curr_streak
-        self.max_streak = max_streak
+        self.max_streak = int(max_streak)
         
-        _total_letters = guesses * LTRS_IN_GUESS
-        self.total_letters = _total_letters
-
-        self.avg_guesses = guesses / attempts
-
-        self.green_rate = (greens / _total_letters) * 100
-        self.yellow_rate = (yellows / _total_letters) * 100
-
-    def __str__(self) -> str:
-        return f'''
-        attempts = {self.attempts}
-        solves = {self.solves}
-        guesses = {self.guesses}
-        average guesses = {self.avg_guesses}
-        greens = {self.greens}
-        yellows = {self.yellows}
-        current streak = {self.curr_streak}
-        max streak = {self.max_streak}
-        total letters = {self.total_letters}
-        green rate = {self.green_rate}
-        yellow rate = {self.yellow_rate}
-        '''
         
-class GroupStats:
-    '''
-    Object to contain group stats returned from the database
-
+class FullStats(BaseStats):
+    '''FullStats for a user
+    
     ---
-    #### Members
-    - attempts
-    - solves
-    - guesses
-    - greens
-    - yellows
-    - total_letters
-    - avg_guesses
-    - green_rate
-    - yellow_rate
+    - \# games played
+    - \# total wins
+    - \# total guesses
+    - \# total greens
+    - \# total yellows
+    - \# uniques
+    - guesses distribution
+    - last_win
+    - current streak
+    - max streak
+    - win rate
+    - average \# of guesses
+    - green rate 
+    - yellow rate
     '''
-    def __init__(self, __raw:tuple):
-        attempts, solves, guesses, greens, yellows = __raw
+    def __init__(self, raw:Tuple) -> None:
 
-        self.attempts = attempts
-        self.solves = solves 
-        self.guesses = guesses
-        self.greens = greens
-        self.yellows = yellows
+        # extract data fields from tuple
+        games_played, \
+        total_wins, \
+        total_guesses, \
+        total_greens, \
+        total_yellows, \
+        uniques, \
+        distro_str, \
+        last_win, \
+        streak, \
+        max_streak, \
+        win_rate, \
+        avg_guesses, \
+        green_rate, \
+        yellow_rate = raw
 
-        _total_letters = guesses * LTRS_IN_GUESS
-        self.total_letters = _total_letters
+        # initialize BaseStats members
+        super().__init__(distro_str, games_played, win_rate, streak, max_streak)
 
-        self.avg_guesses = guesses / attempts
+        # initialize the FullStats fields
+        self.total_wins = int(total_wins)
+        self.total_guesses = int(total_guesses)
+        self.total_greens = int(total_greens)
+        self.total_yellows = int(total_yellows)
+        self.uniques = int(uniques)
+        self.avg_guesses = float(avg_guesses)
+        self.green_rate = float(green_rate)
+        self.yellow_rate = float(yellow_rate)
+        self.last_win = datetime.strptime(str(last_win), '%Y%m%d').date()
+        
+        
+class UpdateValues:
+    def __init__(self, raw:Tuple, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> None:
+        
+        # extract fields from tuple
+        _games, _wins, _guesses, _greens, _yellows, _uniques, _distro_str, _last_win, _curr_streak, _max_streak = raw
 
-        self.green_rate = (greens / _total_letters) * 100
-        self.yellow_rate = (yellows / _total_letters) * 100
 
-    def __str__(self) -> str:
-        return f'''
-        group attempts = {self.attempts}
-        group solves = {self.solves}
-        group guesses = {self.guesses}
-        group average guesses = {self.avg_guesses}
-        group greens = {self.greens}
-        group yellows = {self.yellows}
-        group total letters = {self.total_letters}
-        group green rate = {self.green_rate}
-        group yellow rate = {self.yellow_rate}
-        '''
+        # games update value
+        self._games_update = _games + 1
+
+        # wins update value
+        self._wins_update = _wins + win
+
+        # guesses update value
+        self._guesses_update = _guesses + guesses
+
+        # greens update value
+        self._greens_update = _greens + greens
+
+        # yellows update value
+        self._yellows_update = _yellows + yellows
+
+        # uniques update value
+        self._uniques_update = _uniques + uniques
+
+        # increment streak if user has solved consecutively; otherwise streak will not be incremented
+        _continue_streak = (date - _last_win) == 1 
+
+        # last solve is set to current date if wordle solved; otherwise last solve stays the same
+        self._last_win_update = date if win else _last_win
+
+
+        # increment streak 
+        if win and _continue_streak:
+            self._streak_update = _curr_streak + 1
+        
+        # set streak to 1 if this is the start of a new streak
+        elif win:
+            self._streak_update = 1
+
+        # set streka to 0 if user did not solve wordle today
+        else:
+            self._streak_update = 0
+
+
+        # set max streak accordingly
+        self._max_update = self._streak_update if self._streak_update > _max_streak else _max_streak
+
+
+        # if they win, update the guess distribution
+        if win:
+            # convert string to dictionary
+            temp_dict = dict( (k,v) for k,v in zip(range(1,7), map(int, _distro_str.split())))
+
+            # update dictionary
+            temp_dict[guesses] += 1
+
+            # convert dictionary back to string
+            self._distro_str_update = ' '.join(map(str, temp_dict.values()))
+            
+        # otherwise it stays the same
+        else:
+            self._distro_str_update = _distro_str
+
+
+        # win rate update value
+        self._win_rate_update = self._wins_update / self._games_update
+
+        # avg guesses update value
+        self._avg_guesses_update = self._guesses_update / self._games_update
+
+        # green rate update value
+        self._green_rate_update = self._greens_update / self._uniques_update
+
+        # yellow rate update value 
+        self._yellow_rate_update = self._yellows_update / self._uniques_update
+
 
 class DoubleSubmit(Exception):
     '''Exception raised if user attempts to submit twice on the same day'''
@@ -137,6 +171,7 @@ class DoubleSubmit(Exception):
     # print string including username of user that has attempted to submit twice
     def __str__(self):
         return f'{self.username} has already submitted today'
+
 
 class BotDatabase:
     '''
@@ -165,46 +200,28 @@ class BotDatabase:
             _cur.executescript('''
 
             CREATE TABLE User_Data (
-                username varchar(32), 
-                attempts int, 
-                solves int, 
+                username varchar, 
+                games int, 
+                wins int, 
                 guesses int, 
                 greens int, 
                 yellows int, 
+                uniques int, 
+                guess_distro varchar, 
+                last_win int, 
+                last_submit int, 
                 curr_streak int, 
                 max_streak int, 
-                last_solve int, 
-                last_submit int,
                 PRIMARY KEY (username)
                 ); 
 
-            CREATE TABLE Group_Data (
-                attempts int, 
-                solves int, 
-                guesses int,
-                greens int, 
-                yellows int 
-                ); 
-
-            CREATE TRIGGER Update_Max AFTER UPDATE ON User_Data
-                BEGIN
-                UPDATE User_Data SET max_streak = curr_streak 
-                WHERE username = NEW.username AND curr_streak > max_streak;
-                END;
-                
-            INSERT INTO Group_Data (
-                attempts, 
-                solves, 
-                guesses, 
-                greens, 
-                yellows
-                )
-                VALUES (
-                    0, 
-                    0, 
-                    0, 
-                    0, 
-                    0 
+            CREATE TABLE User_Stats (
+                username varchar,
+                win_rate float,
+                avg_guesses float,
+                green_rate float,
+                yellow_rate float,
+                FOREIGN KEY (username) REFERENCES User_Data(username)
                 );''')
             
             # close the cursor
@@ -217,96 +234,44 @@ class BotDatabase:
         # close connection to database
         self._database.close()
 
-    def get_user_stats(self, username:str) -> UserStats:
-        '''
-        Method returns the stats on the specified user
-        Stats returned: 
-        '''
-        # initialize cursor
-        _cur = self._database.cursor()
-
-        # get user data from the database
-        _raw = _cur.execute(f'''SELECT * FROM User_Data WHERE username = '{username}';''').fetchone()
-        
-        # close the cursor
-        _cur.close()
-
-        # initialize UserStats object with values from database
-        user_stats = UserStats(_raw)
-
-        # return UserStats object
-        return user_stats
-
-    def get_group_stats(self) -> GroupStats:
+    def _update_user(self, username:str, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> BaseStats:
 
         # initialize cursor
         _cur = self._database.cursor()
 
-        # get group data from the database
-        _raw = _cur.execute('SELECT * FROM Group_Data').fetchone()
-        
-        # close cursor
-        _cur.close()
+        # get fields needed calculate updated stats for this user
+        _raw = _cur.execute(f'''SELECT games, 
+                                       wins, 
+                                       guesses, 
+                                       greens, 
+                                       yellows, 
+                                       uniques, 
+                                       guess_distro, 
+                                       last_win, 
+                                       curr_streak, 
+                                       max_streak FROM User_Data WHERE username = '{username}';''').fetchone()
+                
+        # create update values object. This will calculate all the updated stats
+        vals = UpdateValues(_raw, win, guesses, greens, yellows, uniques, date)
 
-        # initialize GroupStats object with values from database
-        group_stats = GroupStats(_raw)
-
-        # return the GroupData object
-        return group_stats
-
-    def _get_update_values(self, solved:int, _last_solve:int, date:int):
-        # increase solves if user solved the wordle; otherwise solves stays the same
-        _solves_update = 'solves + 1' if solved else 'solves'
-
-        # increment streak if user has solved consecutively; otherwise streak will not be incremented
-        _continue_streak = (date - _last_solve) == 1 
-
-        # last solve is set to current date if wordle solved; otherwise last solve stays the same
-        _last_solve_update = date if solved else _last_solve
-
-        # increment streak 
-        if solved and _continue_streak:
-            _streak_update = 'curr_streak + 1'
-        
-        # set streak to 1 if this is the start of a new streak
-        elif solved:
-            _streak_update = '1'
-
-        # set streka to 0 if user did not solve wordle today
-        else:
-            _streak_update = '0'
-
-        # return computed values
-        return _solves_update, _streak_update, _last_solve_update
-
-    def _update_user(self, username:str, solved:bool, guesses:int, greens:int, yellows:int, date:int) -> None:
-
-        # initialize cursor
-        _cur = self._database.cursor()
-
-        # get the last solve date for this user
-        _last_solve, = _cur.execute(f"SELECT last_solve FROM User_Data WHERE username = '{username}';").fetchone()
-
-        # get the update values for the database
-        _solves_update, _streak_update, _last_solve_update = self._get_update_values(solved, _last_solve, date)
-        
         # execute sql script to update data in database for this user
         _cur.executescript(f'''
-            UPDATE User_Data SET attempts = attempts + 1 WHERE username = '{username}';
-            UPDATE User_Data SET solves = {_solves_update} WHERE username = '{username}';
-            UPDATE User_Data SET guesses = guesses + {guesses} WHERE username = '{username}';
-            UPDATE User_Data SET greens = greens + {greens} WHERE username = '{username}';
-            UPDATE User_Data SET yellows = yellows + {yellows} WHERE username = '{username}';
-            UPDATE User_Data SET curr_streak = {_streak_update} WHERE username = '{username}';
-            UPDATE User_Data SET last_solve = {_last_solve_update} WHERE username = '{username}'; 
+            UPDATE User_Data SET games = {vals._games_update} WHERE username = '{username}';
+            UPDATE User_Data SET wins = {vals._wins_update} WHERE username = '{username}';
+            UPDATE User_Data SET guesses = {vals._guesses_update} WHERE username = '{username}';
+            UPDATE User_Data SET greens = {vals._greens_update} WHERE username = '{username}';
+            UPDATE User_Data SET yellows = {vals._yellows_update} WHERE username = '{username}';
+            UPDATE User_Data SET uniques = {vals._uniques_update} WHERE username = '{username}';
+            UPDATE User_Data SET guess_distro = '{vals._distro_str_update}' WHERE username = '{username}';
+            UPDATE User_Data SET last_win = {vals._last_win_update} WHERE username = '{username}';
+            UPDATE User_Data SET curr_streak = {vals._streak_update} WHERE username = '{username}';
+            UPDATE User_Data SET max_streak = {vals._max_update} WHERE username = '{username}';
             UPDATE User_Data SET last_submit = {date} WHERE username = '{username}';
 
-            UPDATE Group_Data SET attempts = attempts + 1;
-            UPDATE Group_Data SET solves = {_solves_update};
-            UPDATE Group_Data SET guesses = guesses + {guesses};
-            UPDATE Group_Data SET greens = greens + {greens};
-            UPDATE Group_Data SET yellows = yellows + {yellows};
-        ''')
+            UPDATE User_Stats SET win_rate = {vals._win_rate_update} WHERE username = '{username}';
+            UPDATE User_Stats SET avg_guesses = {vals._avg_guesses_update} WHERE username = '{username}';
+            UPDATE User_Stats SET green_rate = {vals._green_rate_update} WHERE username = '{username}';
+            UPDATE User_Stats SET yellow_rate = {vals._yellow_rate_update} WHERE username = '{username}';''')
 
         # close cursor
         _cur.close()
@@ -314,17 +279,43 @@ class BotDatabase:
         # commit changes to the database
         self._database.commit()
 
-    def _add_user(self, username:str, solved:bool, guesses:int, greens:int, yellows:int, date:int) -> None:
+        # return the stats object
+        return BaseStats(vals._distro_str_update, vals._games_update, vals._win_rate_update, vals._streak_update, vals._max_update)
+
+
+    def _add_user(self, username:str, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> BaseStats:
         
+        # initialize the distribution dictionary
+        _distro_dict = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}
+
+        # set guess distribution if the player won
+        if win:
+            _distro_dict[guesses] += 1
+
+        # convert dictionary to string
+        _distro_insert = ' '.join(map(str, _distro_dict.values()))
+
         # attempts set to 1
-        _attempts_insert = 1
+        _games_insert = 1
         
         # solves and streak set to 1 if solved; otherwise 0
-        _solves_insert = _streak_insert = 1 if solved else 0
+        _wins_insert = _streak_insert = 1 if win else 0
 
         # last_solve will set to todays date if solved; otherwise set to 0
-        _date_insert = date if solved else 0
-       
+        _date_insert = date if win else 0
+
+        # calculate the win_rate
+        _win_rate = _wins_insert 
+
+        # get number of guesses
+        _avg_guesses = guesses
+
+        # get the green rate
+        _green_rate = greens / uniques
+
+        # get the yellow rate
+        _yellow_rate = yellows / uniques
+
         # initialize cursor
         _cur = self._database.cursor()
 
@@ -332,33 +323,43 @@ class BotDatabase:
         _cur.executescript(f'''
             INSERT INTO User_Data (
                 username, 
-                attempts, 
-                solves, 
+                games, 
+                wins, 
                 guesses, 
                 greens, 
-                yellows, 
+                yellows,
+                uniques, 
+                guess_distro,
+                last_win,
+                last_submit,
                 curr_streak, 
-                max_streak, 
-                last_solve,
-                last_submit)
+                max_streak) 
                 Values (
                     '{username}', 
-                    {_attempts_insert}, 
-                    {_solves_insert}, 
+                    {_games_insert}, 
+                    {_wins_insert}, 
                     {guesses}, 
                     {greens}, 
                     {yellows}, 
-                    {_streak_insert}, 
-                    {_streak_insert}, 
+                    {uniques},
+                    '{_distro_insert}',
                     {_date_insert},
-                    {date});
+                    {date},
+                    {_streak_insert}, 
+                    {_streak_insert});
 
-            UPDATE Group_Data SET attempts = attempts + 1;
-            UPDATE Group_Data SET solves = solves + {_solves_insert};
-            UPDATE Group_Data SET guesses = guesses + {guesses};
-            UPDATE Group_Data SET greens = greens + {greens};
-            UPDATE Group_Data SET yellows = yellows + {yellows};
-        ''')
+            INSERT INTO User_Stats (
+                username, 
+                win_rate, 
+                avg_guesses, 
+                green_rate, 
+                yellow_rate)
+                Values (
+                    '{username}', 
+                    {_win_rate}, 
+                    {_avg_guesses}, 
+                    {_green_rate}, 
+                    {_yellow_rate});''')
 
         # close the cursor
         _cur.close()
@@ -366,9 +367,14 @@ class BotDatabase:
         # commit the changes to the database
         self._database.commit()
 
-    def submit_data(self, username:str, dtime:datetime, solved:bool, guesses:int, greens:int, yellows:int) -> BaseStats:
-        '''Given the username and info on attempt, user stats are updated in the database. A user is added to the database if
-        they are a new user. Method will raise DoubleSubmit exception if method is called on the same user twice or more on one day'''
+        # return the base_stats
+        return BaseStats(_distro_insert, _games_insert, _win_rate, _streak_insert, _streak_insert)
+
+
+    def submit_data(self, username:str, dtime:datetime, win:bool, guesses:int, greens:int, yellows:int, uniques:int) -> BaseStats:
+        '''Given the username and info on game submission, user stats are updated in the database and their BaseStats are returned. 
+        A user is added to the database if they are a new user. 
+        Method will raise DoubleSubmit exception if method is called on the same user twice or more on one day'''
 
         # convert datetime object to int of form YYYYMMDD
         _date = int(dtime.strftime('%Y%m%d'))
@@ -396,17 +402,37 @@ class BotDatabase:
             
             # if we get to this point the user is submitting for the first time on day: _date
             # update stats
-            self._update_user(username, solved, guesses, greens, yellows, _date)
+            return self._update_user(username, win, guesses, greens, yellows, uniques, _date)
 
         # user does not exist in database
         else:
             # add the user to the database
-            self._add_user(username, solved, guesses, greens, yellows, _date)
-        
+            return self._add_user(username, win, guesses, greens, yellows, uniques, _date)
 
-        guessDistr = '10 20 30 40 50 60'
-        numGames = 32
-        winPerc = 94.342341
-        streak = 3
-        maxStreak = 8
-        return BaseStats(guessDistr, numGames, winPerc, streak, maxStreak)
+
+    def get_full_stats(self, username:str) -> FullStats:
+        
+        # initialize cursor
+        _cur = self._database.cursor()
+
+        # get all data fields for the specified user
+        _raw = _cur.execute(f'''SELECT games, 
+                                       wins,
+                                       guesses, 
+                                       greens, 
+                                       yellows, 
+                                       uniques, 
+                                       guess_distro,
+                                       last_win,
+                                       curr_streak, 
+                                       max_streak,
+                                       win_rate, 
+                                       avg_guesses,
+                                       green_rate, 
+                                       yellow_rate FROM User_Data CROSS JOIN User_Stats WHERE User_Data.username = '{username}';''').fetchone()
+        
+        # close the cursor
+        _cur.close()
+
+        # return FullStats object
+        return FullStats(_raw)
