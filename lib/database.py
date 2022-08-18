@@ -21,7 +21,7 @@ class BaseStats:
     def __init__(self, distro_str:str, games_played:int, win_rate:float, streak:int, max_streak:int) -> None:
         self.guess_distro = dict( (k,v) for k,v in zip(range(1,7), map(int, distro_str.split())))
         self.games_played = int(games_played)
-        self.win_rate = float(win_rate)
+        self.win_rate = float(win_rate) * 100
         self.streak = int(streak)
         self.max_streak = int(max_streak)
         
@@ -73,8 +73,8 @@ class FullStats(BaseStats):
         self.total_yellows = int(total_yellows)
         self.uniques = int(uniques)
         self.avg_guesses = float(avg_guesses)
-        self.green_rate = float(green_rate)
-        self.yellow_rate = float(yellow_rate)
+        self.green_rate = float(green_rate) * 100
+        self.yellow_rate = float(yellow_rate) * 100
         self.last_win = datetime.strptime(str(last_win), '%Y%m%d').date()
         
         
