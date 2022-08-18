@@ -234,7 +234,7 @@ class BotDatabase:
         # initialize cursor
         _cur = self._database.cursor()
 
-        # get fields needed calculate stats for this user
+        # get fields needed calculate updated stats for this user
         _raw = _cur.execute(f'''SELECT games, 
                                        wins, 
                                        guesses, 
@@ -246,7 +246,7 @@ class BotDatabase:
                                        curr_streak, 
                                        max_streak FROM User_Data WHERE username = '{username}';''').fetchone()
                 
-        # create update values object
+        # create update values object. This will calculate all the updated stats
         vals = UpdateValues(_raw, win, guesses, greens, yellows, uniques, date)
 
         # execute sql script to update data in database for this user
@@ -365,8 +365,9 @@ class BotDatabase:
         return BaseStats(_distro_insert, _games_insert, _win_rate, _streak_insert, _streak_insert)
 
     def submit_data(self, username:str, dtime:datetime, win:bool, guesses:int, greens:int, yellows:int, uniques:int) -> BaseStats:
-        '''Given the username and info on game submission, user stats are updated in the database and their BaseStats are returned. A user is added to the database if
-        they are a new user. Method will raise DoubleSubmit exception if method is called on the same user twice or more on one day'''
+        '''Given the username and info on game submission, user stats are updated in the database and their BaseStats are returned. 
+        A user is added to the database if they are a new user. 
+        Method will raise DoubleSubmit exception if method is called on the same user twice or more on one day'''
 
         # convert datetime object to int of form YYYYMMDD
         _date = int(dtime.strftime('%Y%m%d'))
