@@ -8,6 +8,7 @@ LTRS_IN_GUESS = 5
 # set DEBUG to True if you want to ignore double submits
 DEBUG = False
 
+
 class BaseStats:
     """Default statistics to return upon a submission.
 
@@ -23,6 +24,7 @@ class BaseStats:
         self.win_rate = float(win_rate)
         self.streak = int(streak)
         self.max_streak = int(max_streak)
+        
         
 class FullStats(BaseStats):
     '''FullStats for a user
@@ -74,6 +76,7 @@ class FullStats(BaseStats):
         self.green_rate = float(green_rate)
         self.yellow_rate = float(yellow_rate)
         self.last_win = datetime.strptime(str(last_win), '%Y%m%d').date()
+        
         
 class UpdateValues:
     def __init__(self, raw:Tuple, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> None:
@@ -152,6 +155,7 @@ class UpdateValues:
         # yellow rate update value 
         self._yellow_rate_update = self._yellows_update / self._uniques_update
 
+
 class DoubleSubmit(Exception):
     '''Exception raised if user attempts to submit twice on the same day'''
     
@@ -167,6 +171,7 @@ class DoubleSubmit(Exception):
     # print string including username of user that has attempted to submit twice
     def __str__(self):
         return f'{self.username} has already submitted today'
+
 
 class BotDatabase:
     '''
@@ -277,6 +282,7 @@ class BotDatabase:
         # return the stats object
         return BaseStats(vals._distro_str_update, vals._games_update, vals._win_rate_update, vals._streak_update, vals._max_update)
 
+
     def _add_user(self, username:str, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> BaseStats:
         
         # initialize the distribution dictionary
@@ -364,6 +370,7 @@ class BotDatabase:
         # return the base_stats
         return BaseStats(_distro_insert, _games_insert, _win_rate, _streak_insert, _streak_insert)
 
+
     def submit_data(self, username:str, dtime:datetime, win:bool, guesses:int, greens:int, yellows:int, uniques:int) -> BaseStats:
         '''Given the username and info on game submission, user stats are updated in the database and their BaseStats are returned. 
         A user is added to the database if they are a new user. 
@@ -401,6 +408,7 @@ class BotDatabase:
         else:
             # add the user to the database
             return self._add_user(username, win, guesses, greens, yellows, uniques, _date)
+
 
     def get_full_stats(self, username:str) -> FullStats:
         

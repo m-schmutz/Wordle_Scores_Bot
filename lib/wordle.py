@@ -1,3 +1,4 @@
+from typing import Optional
 import numpy as np
 import cv2
 import discord
@@ -13,9 +14,9 @@ from enum import Enum, auto
 from collections import Counter
 from random import choice, randint
 
-from . import ansi
-from .chimp import ChimpView
-from .database import BotDatabase, DoubleSubmit
+import ansi
+from chimp import ChimpView
+from database import BaseStats, BotDatabase, DoubleSubmit
 
 def timer(func):
     def _inner(*args, **kwargs):
@@ -29,7 +30,40 @@ def timer(func):
 
 
 class UnidentifiableGame(Exception):
-    pass
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+        self.message = '***I DO NOT UNDERSTAND, TRY A DIFFERENT IMAGE***'
+
+class CharScore(Enum):
+    CORRECT = auto()
+    MISPLACED = auto()
+    INCORRECT = auto()
+
+    def __repr__(self) -> str:
+        char = self.name[0]
+
+        if self == self.CORRECT:
+            return ansi.green(char)
+        if self == self.MISPLACED:
+            return ansi.yellow(char)
+        return ansi.bright_black(char)
+
+class SubmissionReply(discord.Embed):
+    def __init__(self, *, username: str, stats: BaseStats, description: Optional[str] = None, timestamp: Optional[datetime] = None):
+        super().__init__(
+            color= discord.Color.random(),
+            title= f'>>> Results for {username}',
+            description= description,
+            timestamp= timestamp)
+
+        # self.set_image(url='https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fimgc.allpostersimages.com%2Fimg%2Fposters%2Fsteve-buscemi-smiling-in-close-up-portrait_u-L-Q1171600.jpg%3Fh%3D550%26p%3D0%26w%3D550%26background%3Dffffff&f=1&nofb=1')
+        self.add_field(name='Guess Distribution', value=stats.guessDistribution, inline=False)
+        self.add_field(name='Games Played', value=stats.numGamesPlayed, inline=False)
+        self.add_field(name='Win Rate', value=f'{stats.winRate:.02f}%', inline=False)
+        self.add_field(name='Streak', value=stats.streak, inline=False)
+        self.add_field(name='Max Streak', value=stats.maxStreak, inline=False)
+
+
 
 class _wotdScraper:
     """Keeps track of the Word of the Day. Uses Selenium to scrape the NYTimes Wordle webpage."""
@@ -54,7 +88,7 @@ class _wotdScraper:
         self._driver.get('https://www.nytimes.com/games/wordle/index.html')
         return str(self._driver.execute_script('return JSON.parse(this.localStorage.getItem("nyt-wordle-state")).solution'))
 
-    def wotd(self, subDate: datetime) -> str:
+    def wotd(self, date: datetime) -> str:
         """Returns today's word."""
 
         # Potentially update today's word
@@ -65,7 +99,7 @@ class _wotdScraper:
             self._last_updated = today
 
             # If we updated the word as user submit, return the previous word
-            if subDate < today:
+            if date < today:
                 return prev_wotd
 
         return self._wotd
@@ -109,7 +143,7 @@ class _imageProcessor:
 
         _, mask = cv2.threshold(grayscale, self._MAX_DARK, self._MAX_THRESH, cv2.THRESH_BINARY_INV)
         cell_contours = self._genCellContours(grayscale, darkTheme)
-        if len(cell_contours) != 30:
+        if len(cell_contours) % 5:
             raise UnidentifiableGame
 
         # squeeze letters horizontally
@@ -135,183 +169,120 @@ class _imageProcessor:
 
         return mask
 
-    def getGuesses(self, image: cv2.Mat) -> 'list[str]':
+    def getGuesses(self, image: bytes) -> np.ndarray:
         """Use Tesseract to convert a mask of the user's guesses into a list of strings."""
+
+        # Convert Discord image (bytes) to OpenCV image (Mat)
+        mat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
 
         # Generate mask and feed Tesseract :) *pat* *pat* good boy
         text = image_to_string(
-            image= self._genMask(image),
+            image= self._genMask(mat),
             lang= "eng",
             config= '--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ')
 
         # Convert raw string into list
-        return text.lower().strip().split('\n')
+        lst = text.lower().strip().split('\n')
+        arr = np.zeros(shape=(len(lst),5), dtype=str)
+        for row, guess in enumerate(lst):
+            for i, c in enumerate(guess):
+                arr[row,i] = c
+        return arr
 
-class _charScore(Enum):
-    CORRECT = auto()
-    MISPLACED = auto()
-    INCORRECT = auto()
-
-    def __repr__(self) -> str:
-        return self.name
-
+# this probably doesn't need to be a class
 class _gameAnalyzer:
     def __init__(self) -> None:
         self._imgproc = _imageProcessor()
         self._scraper = _wotdScraper()
-        self.guesses = None
-        self.numGreen = None
-        self.numYellow = None
-        self.scores = None
 
-    # Assigns each character a _charScore.
-    def scoreGame(self, image: bytes, subDate: datetime) -> 'tuple[bool, int, int, int]':
+    # Assigns each character a CharScore.
+    def scoreGame(self, image: bytes, submissionDate: datetime) -> 'tuple[bool, int, int, int, int]':
+        """Parse a screenshot of a Wordle game and return information about the game.
+        
+        ---
+        ## Parameters
 
-        # Convert image from Discord (bytes -> np.ndarray -> cv2.Mat)
-        image: cv2.Mat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+        image : `bytes`
+            The user-provided screenshot of their Wordle game.
 
-        # Get user guesses from image
-        self.guesses = self._imgproc.getGuesses(image)
-        self.numGuesses = len(self.guesses)
-        self.numGreen = 0
-        self.numYellow = 0
-        self.scores = []
+        submissionDate : `datetime`
+            A datetime object respresenting the time of submission.
 
-        # Score each guess
-        wotd = self._scraper.wotd(subDate)
-        init_counts = Counter(wotd)
-        init_score = [ _charScore.INCORRECT ] * 5
+        ---
+        ## Returns
 
-        for guess in self.guesses:
-            score = init_score.copy()
-            counts = init_counts.copy()
+        self.solved : `bool` ,
+            True if the game was won. False otherwise.
+
+        self.numGuesses : `int` ,
+            The number of guesses taken.
+
+        self.uniqueCorrect : `int` ,
+            The number of unique correct letter positions.
+
+        self.uniqueMisplaced : `int` ,
+            The number of unique misplaced letter positions.
+
+        self.uniqueAll : `int`
+            The number of unique letter positions.
+
+        ---
+        ## Raises
+
+        UnidentifiableGame
+            Unable to find a game in the image.
+        """
+
+        # Get user guesses and initialize game data
+        self.guesses        = self._imgproc.getGuesses(image)
+        self.numGuesses, _  = self.guesses.shape
+        self.wotd           = self._scraper.wotd(submissionDate)
+        self._counts        = Counter(self.wotd)
+
+        # Score the game
+        # it's easier to score yellows after greens instead of scoring them
+        # "inline". otherwise, we would have to look ahead for potential
+        # greens because green has a higher precedence and therefore consumes
+        # one count of itself before any would-be yellows have the chance.
+        scores = np.full(shape=self.guesses.shape, fill_value=CharScore.INCORRECT)
+        uniques = [set(),set(),set(),set(),set()]
+        tC = tM = uC = uM = 0
+
+        for row, guess in enumerate(self.guesses):
             remaining: list[tuple] = []
+            counts: Counter = self._counts.copy()
 
-            # Mark all correct characters
-            for i, gchar, wchar in zip(range(5), guess, wotd):
-                if gchar == wchar:
-                    score[i] = _charScore.CORRECT
-                    counts[wchar] -= 1
-                    self.numGreen += 1
+            # score CORRECT LETTERS in CORRECT POSITION (Green)
+            for col, gc, wc in zip(range(5), guess, self.wotd):
+                if gc == wc:
+                    scores[row,col] = CharScore.CORRECT
+                    counts[gc] -= 1
+                    tC += 1
+
+                    #(1/2) start adding unique chars...
+                    if gc not in uniques[col]:
+                        uC += 1
+                        uniques[col].add(gc)
                 else:
-                    remaining.append((i, gchar))
+                    remaining.append( (row, col, gc) )
 
-            # Mark all misplaced characters
-            for i, gchar in remaining:
-                if gchar in wotd and counts[gchar] > 0:
-                    score[i] = _charScore.MISPLACED
-                    counts[gchar] -= 1
-                    self.numYellow += 1
+            # score CORRECT LETTERS in WRONG POSITION (Yellow)
+            for row, col, gc in remaining:
+                if gc in self.wotd and counts[gc] > 0:
+                    scores[row,col] = CharScore.MISPLACED
+                    counts[gc] -= 1
+                    tM += 1
+                    if gc not in uniques[col]:
+                        uM += 1
 
-            self.scores.append(score)
-        self.solved = all(s == _charScore.CORRECT for s in self.scores[-1])
+                #(2/2) ...finish adding unique chars
+                uniques[col].add(gc)
 
-        # -> (SOLVED bool, #GUESSES int, #GREEN int, #YELLOW int)
-        return (self.solved, self.numGuesses, self.numGreen, self.numYellow)
-
-class Bot:
-    def __init__(self, token: str, id: int) -> None:
-        self._token = token
-        self._guild = discord.Object(id=id)
-        self._synced = False
-        self._ga = _gameAnalyzer()
-        self._db = BotDatabase(db_path='./lib/stats.db')
-        self._bot = commands.Bot(
-            command_prefix = '!',
-            intents = discord.Intents.all(),
-            help_command = None)
-
-        ### Discord Bot Events
-        @self._bot.event
-        async def on_ready():
-            await self._bot.wait_until_ready()
-            if not self._synced:
-                await self._bot.tree.sync(guild=self._guild)
-                self._synced = True
-
-            print(f'\'{self._bot.user}\' logged in and ready!')
-
-        ### Discord Bot Application Commands
-        @self._bot.tree.command(name= 'submit',
-            description= 'Submit a screenshot of your Wordle game!',
-            guild= self._guild)
-        async def _(interaction: discord.Interaction, image: discord.Attachment):
-            # Shhhhhhhhhhhh we'll get there, Discord...
-            await interaction.response.defer()
-
-            # Get relevant data
-            subDate = interaction.created_at.astimezone().date()
-            try:
-                results = self._ga.scoreGame(await image.read(), subDate)
-            except UnidentifiableGame:
-                await interaction.followup.send(
-                    content= '***I DO NOT UNDERSTAND, TRY A DIFFERENT IMAGE***',
-                    ephemeral= True)
-                return
-
-            # Update database then reply
-            try:
-                self._db.submit_data(str(interaction.user), subDate, *results)
-            except DoubleSubmit:
-                await interaction.followup.send(
-                    content= 'You already submit today\'s game :)',
-                    ephemeral= True)
-            else:
-                await interaction.followup.send(
-                    content= f'{interaction.user.mention}\'s submission:',
-                    file= await image.to_file(spoiler=True))
-
-                await interaction.followup.send(
-                    content= self._getResponse(*results),
-                    ephemeral= True)
-
-        @self._bot.tree.command(name= 'chimp',
-            description= 'Are you smarter than a chimp? Play this quick memorization game to find out!',
-            guild= self._guild)
-        async def _(interaction: discord.Interaction):
-            chimp = ChimpView()
-            await interaction.response.send_message(view=chimp)
-
-        @self._bot.tree.command(name= 'link',
-            description= 'Get the link to the Wordle webpage.',
-            guild= self._guild)
-        async def _(interaction: discord.Interaction):
-            await interaction.response.send_message(
-                view= discord.ui.View(timeout=0).add_item(
-                    discord.ui.Button(
-                        label= 'Play Wordle',
-                        style= discord.ButtonStyle.link,
-                        url= 'https://www.nytimes.com/games/wordle/index.html')),
-                ephemeral= True)
-
-        @self._bot.tree.command(name='roll',
-            description= 'Roll an N-sided die!',
-            guild= self._guild)
-        async def _(interaction: discord.Interaction, faces: discord.app_commands.Range[int, 2, None]):
-            await interaction.response.send_message(f'You rolled a {randint(1, faces)}!')
-
-    def _getResponse(self, solved: bool, numGuesses: int, *argeater) -> str:
-        if solved:
-            if numGuesses < 3:
-                return choice(['damn that\'s crazy.. i have google too 🙄', 'suuuuuuuure\nyou just *knew* it right? 🤔'])
-            
-            if numGuesses < 5:
-                return choice(['ok?', 'yea', 'cool', 'yep', 'that\'s definitely a game'])
-
-            return choice([f'it actually took you {numGuesses} guess{"es" if numGuesses > 1 else ""}. lmao.', 'garbage'])
-        return choice(['you suck!', 'better luck next time idiot'])
-
-    def run(self) -> None:
-        """WARNING: This does not return until the bot stops."""
-
-        self._bot.run(token=self._token)
-        print('Bot exited.')
-
-
-""" STATS to return on submission
-- # guesses distribution
-- # games played
-- win %
-- streak
-- max streak
-"""
+        self.scores             = scores
+        self.solved             = all(s == CharScore.CORRECT for s in scores[-1])
+        self.totalCorrect       = tC
+        self.totalMisplaced     = tM
+        self.uniqueCorrect      = uC
+        self.uniqueMisplaced    = uM
+        self.uniqueAll          = sum(len(us) for us in uniques)
+        return (self.solved, self.numGuesses, uC, uM) #tC, tM, self.uniqueAll
