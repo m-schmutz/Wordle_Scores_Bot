@@ -317,3 +317,15 @@ class WordLookup:
 
         # return the index of the word
         return word_order.index(word)
+
+    
+    def _get_word_order(self) -> 'list[str]':
+        word_order = load_object('word_order')
+
+        return word_order
+
+
+    def _get_valid_words(self) -> 'list[str]':
+        valid_words = load_object('valid_words')
+
+        return valid_words
