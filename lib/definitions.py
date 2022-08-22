@@ -35,20 +35,25 @@ class WordInfo:
         self.examples:list = exam_json['examples']
    
     @staticmethod
-    def parse_definitions(json_defs:list) -> dict[str, list]:
-
+    def parse_definitions(json_defs:list) -> dict[str, list[str]]:
+        # initialize the dictionary
         grouped_defs:dict[str, list] = dict()
 
+        # loop through each definition and part of speech dicitonary
         for entry in json_defs:
-            definition = entry['definition']
-            part_of_speech = entry['partOfSpeech']
+            # extract definition and part of speech
+            definition:str = entry['definition']
+            part_of_speech:str = entry['partOfSpeech']
 
+            # try to append definition to the list mapped to part of speech
             try:
                 grouped_defs[part_of_speech].append(definition)
 
+            # else make new list mapped at part of speech 
             except KeyError:
                 grouped_defs[part_of_speech] = [definition]
 
+        # return the dictionary
         return grouped_defs
 
 
