@@ -1,6 +1,5 @@
-from typing import Optional
-import numpy as np
 import cv2
+import numpy as np
 import discord
 from discord import Intents, Object
 from discord.ext import commands
@@ -30,7 +29,7 @@ def timer(func):
 
 @dataclass
 class WordleGame:
-    """DTO"""
+    """Game stats DTO"""
 
     guessTable: np.ndarray
     numGuesses: int
@@ -42,10 +41,10 @@ class WordleGame:
     totalCorrect: int
     totalMisplaced: int
 
-class UnidentifiableGame(Exception):
-    def __init__(self, *args: object) -> None:
+class InvalidGame(Exception):
+    def __init__(self, reason: str, *args: object) -> None:
         super().__init__(*args)
-        self.message = '***I DO NOT UNDERSTAND, TRY A DIFFERENT IMAGE***'
+        self.reason = reason
 
 class CharScore(Enum):
     CORRECT = auto()
@@ -53,21 +52,23 @@ class CharScore(Enum):
     INCORRECT = auto()
 
     def __repr__(self) -> str:
-        char = self.name[0]
+        match self:
+            case CharScore.CORRECT:
+                return ansi.green(self.name[0])
+            case CharScore.MISPLACED:
+                return ansi.yellow(self.name[0])
+            case CharScore.INCORRECT:
+                return ansi.bright_black(self.name[0])
 
-        if self == self.CORRECT:
-            return ansi.green(char)
-        if self == self.MISPLACED:
-            return ansi.yellow(char)
-        return ansi.bright_black(char)
+        raise AssertionError(f'Unexpected CharScore "{self.name}"')
 
 class SubmissionReply(discord.Embed):
-    def __init__(self, username: str, stats: BaseStats, description: Optional[str] = None, timestamp: Optional[datetime] = None):
+    def __init__(self, username: str, stats: BaseStats):
         super().__init__(
             color= discord.Color.random(),
             title= f'>>> Results for {username}',
-            description= description,
-            timestamp= timestamp)
+            description= None,
+            timestamp= None)
 
         # self.set_image(url='https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fimgc.allpostersimages.com%2Fimg%2Fposters%2Fsteve-buscemi-smiling-in-close-up-portrait_u-L-Q1171600.jpg%3Fh%3D550%26p%3D0%26w%3D550%26background%3Dffffff&f=1&nofb=1')
         self.add_field(name='Guess Distribution', value=stats.guess_distro, inline=False)
@@ -76,28 +77,30 @@ class SubmissionReply(discord.Embed):
         self.add_field(name='Streak', value=stats.streak, inline=False)
         self.add_field(name='Max Streak', value=stats.max_streak, inline=False)
 
-class WebScraper:
+class WordleScraper:
     """Keeps track of the Word of the Day. Uses Selenium to scrape the NYTimes Wordle webpage."""
 
     def __init__(self) -> None:
-        options = webdriver.FirefoxOptions()
-        options.headless = True
-        options.page_load_strategy = 'eager'
-        service = Service(log_path='./lib/geckodriver.log')
+        opts = webdriver.FirefoxOptions()
+        opts.headless = True
+        opts.page_load_strategy = 'eager'
+        serv = Service(log_path='./lib/geckodriver.log')
 
-        self._driver = webdriver.Firefox(options=options, service=service)
+        self._driver = webdriver.Firefox(options=opts, service=serv)
+        self._url = 'https://www.nytimes.com/games/wordle/index.html'
+        self._localStorageScript = 'return JSON.parse(this.localStorage.getItem("nyt-wordle-state")).solution'
         self._last_updated = datetime.now().date()
-        self._wotd = self._scrape()
+        self._wotd = self._getWotd()
 
     def __del__(self) -> None:
         # WILL CAUSE MEMORY LEAK IF NOT CLOSED
         self._driver.quit()
 
-    def _scrape(self) -> str:
+    def _getWotd(self) -> str:
         """Webscrapes the official webpage to obtain the Word of the Day."""
 
-        self._driver.get('https://www.nytimes.com/games/wordle/index.html')
-        return str(self._driver.execute_script('return JSON.parse(this.localStorage.getItem("nyt-wordle-state")).solution'))
+        self._driver.get(self._url)
+        return str(self._driver.execute_script(self._localStorageScript))
 
     def wotd(self, date: datetime) -> str:
         """Returns today's word."""
@@ -106,7 +109,7 @@ class WebScraper:
         today = datetime.now().date()
         if self._last_updated < today:
             prev_wotd = self._wotd
-            self._wotd = self._scrape()
+            self._wotd = self._getWotd()
             self._last_updated = today
 
             # If we updated the word as user submit, return the previous word
@@ -121,27 +124,26 @@ class WordleBot(commands.Bot):
             command_prefix= '!',
             intents= Intents.all(),
             help_command= None)
+        self._tessConfig = '--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        self._maxThresh = 255
+        self._darkThresh = 0x26
+        self._lightThresh = 0xeb
+        # Dark Theme:
+        #   BG = 0x121213 (0x12 grayscale)
+        #   Next darkest = 0x3a3a3c (0x3a grayscale)
+        #   => midpoint = 0x26
+        # Light Theme:
+        #   BG = 0xffffff (0xff grayscale)
+        #   Next lightest = 0xd3d6da (0xd6 grayscale)
+        #   => midpoint = 0xeb
+
         self.synced = False
         self.guild = Object(id=server_id)
-        self.scraper = WebScraper()
+        self.scraper = WordleScraper()
         self.db = BotDatabase(db_path='./lib/stats.db')
 
-    ### Overridden methods
-    async def on_ready(self):
-
-        # Wait for client cache to load
-        await self.wait_until_ready()
-
-        # Sync application commands
-        if not self.synced:
-            await self.tree.sync(guild=self.guild)
-            self.synced = True
-
-        print(f'{self.user} ready!')
-
-    ### Additional methods
     def _guessesFromImage(self, image: bytes) -> np.ndarray:
-        """Use Tesseract to convert a mask of the user's guesses into a list of strings.
+        """Use Tesseract to compile a list of the guesses.
         
         ---
         ## Parameters
@@ -158,81 +160,74 @@ class WordleBot(commands.Bot):
         ---
         ## Raises
 
-        UnidentifiableGame
+        InvalidGame
             Unable to find a game in the image."""
 
-        # Convert Discord image (bytes) to OpenCV image (Mat)
-        imageMat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+        ### Get cell contours ###
 
-        grayscale = cv2.cvtColor(imageMat, cv2.COLOR_BGR2GRAY)
-        darkTheme = (np.median(grayscale[:1,:]) < 200)
+        # Convert image (bytes) to OpenCV matrix (cv2.Mat) and get grayscale
+        mat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
+        gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY)
 
-        # Create and use the cell mask to find the cell contours.
-        contours, _ = cv2.findContours(
-            image= cv2.threshold(grayscale, 30, 255, cv2.THRESH_BINARY)[1]
-                if darkTheme
-                else cv2.threshold(grayscale, 200, 255, cv2.THRESH_BINARY_INV)[1],
-            mode= cv2.RETR_EXTERNAL,
-            method= cv2.CHAIN_APPROX_SIMPLE)
+        # Create a mask of the character cells so we can find their contours
+        if np.median(gray[:1,:]) < 200: # Dark theme
+            _, cellmask = cv2.threshold(gray, self._darkThresh, self._maxThresh, cv2.THRESH_BINARY)
+        else: # Light theme
+            _, cellmask = cv2.threshold(gray, self._lightThresh, self._maxThresh, cv2.THRESH_BINARY_INV)
+        contours, _ = cv2.findContours(cellmask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # Remove non-quadrilaterals and non-squares
+        # Discard as many unreasonable contours as possible
         filtered = []
         for c in contours:
-            if c.size != 8:
+            # Skip non-quadrilaterals
+            if c.shape != (4,1,2):
                 continue
             
+            # Skip ~non-squares
             _,_,w,h = cv2.boundingRect(c)
             if abs(w-h) > (w+h)*0.015:
                 continue
 
             filtered.append(c)
-        assert all(elem.shape == (4,1,2) for elem in filtered), ansi.red('Not all contours have the shape (4,1,2).')
 
-        # Remove all axis of length one since they are useless. Additionally, reverse
-        # the list since findContours works from SE to NW and we want our contours
-        # organized from NW to SE (i.e. guess order).
-        cell_contours = np.squeeze(filtered)[::-1]
+        # Remove all axis of length one since they are useless
+        cell_contours = np.squeeze(filtered)
+        if len(cell_contours) != 30:
+            raise InvalidGame('Could not find the game!')
+        _, charmask = cv2.threshold(gray, self._lightThresh, self._maxThresh, cv2.THRESH_BINARY_INV)
 
-        if len(cell_contours) % 5:
-            raise UnidentifiableGame
+        ### Transform charmask to increase legibility ###
 
-        _, mask = cv2.threshold(grayscale, 200, 255, cv2.THRESH_BINARY_INV)
-
-        # squeeze letters horizontally
+        # squeeze letters horizontally in reverse order since cv2.findContours works
+        # from SE to NW and we want our contours organized from NW to SE (i.e. guess order).
         cols = []
         for c in cell_contours[:5]:
-            x,y,w,_ = cv2.boundingRect(c)
+            x,_,w,_ = cv2.boundingRect(c)
             off = w // 4
-            cols.append(mask[:, x+off : x+w-off])
-        mask: cv2.Mat = cv2.hconcat(cols)
+            cols.append(charmask[:, x+off : x+w-off])
+        charmask = cv2.hconcat(cols[::-1])
 
         # crop vertically
-        ys = set(
-            y
+        ys = set(y
             for contour in cell_contours
             for (_, y) in contour)
-        mask: np.ndarray = mask[min(ys):max(ys), :]
-        print(len(ys), ys)
+        charmask = charmask[min(ys):max(ys), :]
 
-        # potentially fill empty horizontal strips
-        if not darkTheme:
-            for i in range(mask.shape[0]):
-                if all(mask[i,:] == 0):
-                    mask[i,:] = 255
+        ### Get dem words ###
 
         # Generate mask and feed Tesseract :) *pat* *pat* good boy
-        text = image_to_string(
-            image= mask,
-            lang= "eng",
-            config= '--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+        text:str = image_to_string(image=charmask, lang="eng", config=self._tessConfig)
+        guess_list = text.strip().lower().split('\n')
 
-        # Convert raw string into list
-        lst = text.lower().strip().split('\n')
-        arr = np.zeros(shape=(len(lst),5), dtype=str)
-        for row, guess in enumerate(lst):
-            for i, c in enumerate(guess):
-                arr[row,i] = c
-        return arr
+        # Validate guesses
+        from word_lookup import WordLookup
+        valid_words = set(WordLookup().get_valid_words())
+        for guess in guess_list:
+            if guess not in valid_words:
+                raise InvalidGame('Invalid word detected!')
+
+        # Return guesses as 2-D numpy array
+        return np.array( [list(g) for g in guess_list] )
 
     def getResponse(self, solved: bool, numGuesses: int) -> str:
         if solved:
@@ -295,14 +290,14 @@ class WordleBot(commands.Bot):
         uniques = [set() for _ in range(5)]
         tC = tM = uC = uM = 0
         for row, guess in enumerate(guesses):
-            remaining: list[tuple] = []
-            counts: Counter = counts.copy()
+            _counts = counts.copy()
+            remaining = []
 
             # score CORRECT LETTERS in CORRECT POSITION (Green)
             for col, gc, wc in zip(range(5), guess, wotd):
                 if gc == wc:
                     scores[row,col] = CharScore.CORRECT
-                    counts[gc] -= 1
+                    _counts[gc] -= 1
                     tC += 1
 
                     #(1/2) start adding unique chars...
@@ -314,9 +309,9 @@ class WordleBot(commands.Bot):
 
             # score CORRECT LETTERS in WRONG POSITION (Yellow)
             for row, col, gc in remaining:
-                if gc in wotd and counts[gc] > 0:
+                if gc in wotd and _counts[gc] > 0:
                     scores[row,col] = CharScore.MISPLACED
-                    counts[gc] -= 1
+                    _counts[gc] -= 1
                     tM += 1
                     if gc not in uniques[col]:
                         uM += 1
@@ -334,3 +329,16 @@ class WordleBot(commands.Bot):
             uniqueAll= sum(len(set) for set in uniques),
             totalCorrect= tC,
             totalMisplaced= tM)
+
+    ### Overridden methods
+    async def on_ready(self):
+
+        # Wait for client cache to load
+        await self.wait_until_ready()
+
+        # Sync application commands
+        if not self.synced:
+            await self.tree.sync(guild=self.guild)
+            self.synced = True
+
+        print(f'{self.user} ready!')

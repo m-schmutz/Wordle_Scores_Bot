@@ -2,9 +2,9 @@ from random import randint
 from credentials import bot_token, server_id
 from discord import Interaction, Attachment, ButtonStyle, app_commands
 from discord.ui import Button, View
-from chimp import ChimpView
+# from chimp import ChimpView
 from database import DoubleSubmit
-from wordle import SubmissionReply, UnidentifiableGame, WordleBot
+from wordle import SubmissionReply, InvalidGame, WordleBot
 
 def main() -> None:
     bot = WordleBot(server_id)
@@ -22,8 +22,8 @@ def main() -> None:
         # If it cannot be scored, reply accordingly.
         try:
             game = bot.scoreGame(await image.read(), date)
-        except UnidentifiableGame as e:
-            await interaction.response.send_message(content=e.message, ephemeral=True)
+        except InvalidGame as e:
+            await interaction.response.send_message(content=e.reason, ephemeral=True)
             return
 
         # Attempt to submit scores to database.
@@ -54,12 +54,12 @@ def main() -> None:
                 numGuesses= game.numGuesses),
             ephemeral= True)
 
-    @bot.tree.command(name='chimp',
-        description= 'Are you smarter than a chimp? Play this quick memorization game to find out!',
-        guild= bot.guild)
-    async def _(interaction: Interaction):
-        chimp = ChimpView()
-        await interaction.response.send_message(view=chimp)
+    # @bot.tree.command(name='chimp',
+    #     description= 'Are you smarter than a chimp? Play this quick memorization game to find out!',
+    #     guild= bot.guild)
+    # async def _(interaction: Interaction):
+    #     chimp = ChimpView()
+    #     await interaction.response.send_message(view=chimp)
 
     @bot.tree.command(name='link',
         description= 'Get the link to the Wordle webpage.',

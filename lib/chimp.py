@@ -26,13 +26,14 @@ class ChimpView(discord.ui.View):
         self.order: list[int] = []
         self.won = False
         self.lost = False
-        # Declaring the type allows the interpreter to infer information. This is left
-        # uninitialized because the discord package disallows setting this attribute.
-        self.children: list[ChimpButton]
         self.randomizeBoard()
 
     # Determines the next course of action based on a user's button press.
     def _processButtonPress(self, interaction: discord.Interaction) -> None:
+        ### FOR TYPE HINTING ###
+        self.children: list[ChimpButton]
+        ### FOR TYPE HINTING ###
+
         button_index = int(interaction.data['custom_id'].split('-')[1])
 
         ### Did the user press the button in order?
@@ -92,8 +93,7 @@ class ChimpView(discord.ui.View):
 
         # generate the buttons and add them
         for i in range(self.board_size):
-            self.add_item(
-                ChimpButton(
-                    callback     = self.buttonCallback,
-                    custom_id    = f'button-{i}',
-                    sequence_num = (self.order.index(i) + 1) if (i in self.order) else (None) ))
+            self.add_item(ChimpButton(
+                callback = self.buttonCallback,
+                custom_id = f'button-{i}',
+                sequence_num = self.order.index(i)+1 if i in self.order else None))

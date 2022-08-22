@@ -1,5 +1,5 @@
 from typing import Tuple
-from .wordle import WebScraper
+from wordle import WordleScraper
 from datetime import datetime, timedelta
 import requests
 import re
@@ -37,7 +37,7 @@ def get_word_banks() -> Tuple[list, list]:
 
 def get_wotd() -> str:
     # create a wotd_scraper object. This will get the wotd on creation
-    scraper = WebScraper()
+    scraper = WordleScraper()
 
     # return the word of the day 
     return scraper._wotd
