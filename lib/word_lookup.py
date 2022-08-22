@@ -1,5 +1,5 @@
 from typing import Tuple
-from wordle import WordleScraper
+from lib.wordle import WordleScraper
 from datetime import datetime, timedelta
 import requests
 import re
@@ -14,15 +14,15 @@ class WordLookup:
 
     def __init__(self) -> None:
         # check if files need to be generated
-        if not self.check_existing():
+        if not self._check_existing():
             # generate files and registry
-            self.gen_files()
+            self._gen_files()
 
  
     def lookup_by_date(self, dtime:datetime) -> str:
         '''Takes in a datetime object and returns the word mapped at that date'''
         # load in the year dictionary from pickle file
-        year_dict = self.load_object(dtime.year)
+        year_dict = self._load_object(dtime.year)
 
         # return the word at the datetime passed
         return year_dict[dtime]   
@@ -31,7 +31,7 @@ class WordLookup:
     def lookup_by_word(self, word:str) -> datetime:
         '''Takes in a word and returns the datetime object mapped at that word'''
         # load the word dictionary from pcilel file
-        word_dict = self.load_object('reverse')
+        word_dict = self._load_object('reverse')
 
         # return datetime at word passed
         return word_dict[word]
@@ -40,7 +40,7 @@ class WordLookup:
     def get_valid_words(self) -> list:
         '''Returns the list of valid words retrieved from the website'''
         # load the valid_words list from pickle file
-        valid_words = self.load_object('valid_words')
+        valid_words = self._load_object('valid_words')
 
         # return the list
         return valid_words
@@ -49,21 +49,21 @@ class WordLookup:
     def get_word_index(self, word:str) -> int:
         '''Takes in a word and returns the index of the word in the word_order list'''
         # load the word_order list form the pickle file
-        word_order = self.load_object('word_order')
+        word_order = self._load_object('word_order')
 
         # return the index of the word
         return word_order.index(word)
 
   
     def _get_word_order(self) -> list[str]:
-        word_order = self.load_object('word_order')
+        word_order = self._load_object('word_order')
 
         return word_order
 
     ####################################################
     # methods for generating files
 
-    def check_existing(self) -> bool:
+    def _check_existing(self) -> bool:
         # get the parent directory path
         parent_dir = './lib/wordle_pickles/{prefix}.pkl'[:20]
 
@@ -82,7 +82,7 @@ class WordLookup:
         if os.path.exists(registry_path):
 
             # load the registry list
-            registry = self.load_object('registry')
+            registry = self._load_object('registry')
 
             # loop through each item in the registry list
             for file_prefix in registry:
@@ -101,7 +101,7 @@ class WordLookup:
             return False
             
 
-    def get_word_banks(self) -> Tuple[list, list]:
+    def _get_word_banks(self) -> Tuple[list, list]:
         # get the webpage source as text from the website
         web_source_txt = requests.get('https://www.nytimes.com/games/wordle/index.html').text
 
@@ -122,7 +122,7 @@ class WordLookup:
         return word_order, valid_words
 
 
-    def get_wotd(self) -> str:
+    def _get_wotd(self) -> str:
         # create a wotd_scraper object. This will get the wotd on creation
         scraper = WordleScraper()
 
@@ -130,17 +130,17 @@ class WordLookup:
         return scraper._wotd
 
 
-    def get_todays_date(self) -> datetime:
+    def _get_todays_date(self) -> datetime:
         # return todays date as a datetime object
         return datetime.now().date()
 
 
-    def map_date_to_word(self, word_order:list) -> dict:
+    def _map_date_to_word(self, word_order:list) -> dict[datetime, str]:
         # get todays date as a datetime object
-        todays_date = self.get_todays_date()
+        todays_date = self._get_todays_date()
 
         # get todays word of the day
-        wotd = self.get_wotd()
+        wotd = self._get_wotd()
 
         # initialize timedelta to 1 day
         delta = timedelta(days=1)
@@ -170,7 +170,7 @@ class WordLookup:
         return d_to_w
 
 
-    def map_word_to_date(self, d_to_w:dict) -> dict:
+    def _map_word_to_date(self, d_to_w:dict) -> dict[str, datetime]:
         # initialize new dictionary
         w_to_d = dict()
 
@@ -183,7 +183,7 @@ class WordLookup:
         return w_to_d
 
 
-    def pkl_object(self, object:dict|list, file_prefix:str) -> None:
+    def _pkl_object(self, object:dict|list, file_prefix:str) -> None:
         # path for the pickled
         file_path = f'./lib/wordle_pickles/{file_prefix}.pkl'
         
@@ -194,7 +194,7 @@ class WordLookup:
             pickle.dump(object, f)
 
 
-    def load_object(self, file_prefix:str) -> dict|list:
+    def _load_object(self, file_prefix:str) -> dict|list:
         # get the file path for the pickled data
         file_path = f'./lib/wordle_pickles/{file_prefix}.pkl'
         
@@ -207,7 +207,7 @@ class WordLookup:
         return object  
 
 
-    def store_d_to_w(self, d_to_w:dict) -> list:
+    def _store_d_to_w(self, d_to_w:dict[datetime, str]) -> list:
         # for typing stuff
         date:datetime
 
@@ -232,7 +232,7 @@ class WordLookup:
             # else current date is in the next year, dump the current temp dictionary and start again with new year
             else:
                 # pkl the temp dictionary
-                self.pkl_object(temp_dict, curr_year)
+                self._pkl_object(temp_dict, curr_year)
 
                 # add the file prefix to the registry list
                 registry.append(str(curr_year))
@@ -247,7 +247,7 @@ class WordLookup:
             curr_year = date.year
 
         # pickle last temp_dict
-        self.pkl_object(temp_dict, curr_year)
+        self._pkl_object(temp_dict, curr_year)
 
         # add the file prefix to the registry list
         registry.append(str(curr_year))
@@ -256,17 +256,17 @@ class WordLookup:
         return registry
 
 
-    def store_other(self, object:dict|list, prefix:str) -> str:
+    def _store_other(self, object:dict|list, prefix:str) -> str:
         # pickle the object
-        self.pkl_object(object, prefix)
+        self._pkl_object(object, prefix)
 
         # return the prefix after the object as been successfully stored
         return prefix
 
 
-    def gen_files(self) -> None:
+    def _gen_files(self) -> None:
         # get the word lists from the wordle website
-        word_order, valid_words = self.get_word_banks()
+        word_order, valid_words = self._get_word_banks()
 
         # add the words in word_order to valid words
         # we found that the words in word_order are not contained in valid_words
@@ -276,26 +276,26 @@ class WordLookup:
         valid_words.sort()
 
         # get the dictionary that maps dates to words
-        d_to_w = self.map_date_to_word(word_order)
+        d_to_w = self._map_date_to_word(word_order)
 
         # get the dictionary that maps words to dates
-        w_to_d = self.map_word_to_date(d_to_w)
+        w_to_d = self._map_word_to_date(d_to_w)
 
         # initialize registry list. This will store the prefixes of files so that
         # class can determine if needed files exist or not
         registry_list = list()
 
         # store the word_order list to files and add file prefixes to registry list
-        registry_list.append(self.store_other(word_order, 'word_order'))
+        registry_list.append(self._store_other(word_order, 'word_order'))
 
         # store the d_to_w dictionary to files and add file prefixes to registry list
-        registry_list.extend(self.store_d_to_w(d_to_w))
+        registry_list.extend(self._store_d_to_w(d_to_w))
 
         # store w_to_d dictionary to file and add file prefix to the registry list
-        registry_list.append(self.store_other(w_to_d, 'reverse'))
+        registry_list.append(self._store_other(w_to_d, 'reverse'))
 
         # store the valid words to file and add the file prefix to the registry list
-        registry_list.append(self.store_other(valid_words, 'valid_words'))
+        registry_list.append(self._store_other(valid_words, 'valid_words'))
 
         # write registry list to pickle file for restart
-        self.pkl_object(registry_list, 'registry')
+        self._pkl_object(registry_list, 'registry')

@@ -3,27 +3,24 @@ import requests
 from credentials import api_headers
 import json
 
-DEF_TEMPLATE = 'https://wordsapiv1.p.rapidapi.com/words/{word}/definitions'
 
-FREQ_TEMPLATE = 'https://wordsapiv1.p.rapidapi.com/words/{word}/frequency'
-
-EXAM_TEMPLATE = 'https://wordsapiv1.p.rapidapi.com/words/{word}/examples'
 
 
 class WordInfo:
+
     def __init__(self, wotd:str) -> None:
 
         # store the word that all the info will be for
         self.word = wotd
 
         # get json data for the definition(s)
-        def_json = json.loads(requests.get(DEF_TEMPLATE.format(word = wotd), headers=api_headers).text)
+        def_json = json.loads(requests.get(f'https://wordsapiv1.p.rapidapi.com/words/{wotd}/definitions', headers=api_headers).text)
         
         # get json data for the frequency 
-        freq_json = json.loads(requests.get(FREQ_TEMPLATE.format(word = wotd), headers=api_headers).text)
+        freq_json = json.loads(requests.get(f'https://wordsapiv1.p.rapidapi.com/words/{wotd}/frequency', headers=api_headers).text)
 
         # get the json data for examples
-        exam_json = json.loads(requests.get(EXAM_TEMPLATE.format(word = wotd), headers=api_headers).text)
+        exam_json = json.loads(requests.get(f'https://wordsapiv1.p.rapidapi.com/words/{wotd}/examples', headers=api_headers).text)
         
         # store the definitions of word sorted by part of speech
         self.definitions = self.parse_definitions(def_json['definitions'])
