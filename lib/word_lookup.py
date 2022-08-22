@@ -219,6 +219,13 @@ def gen_files():
     # get the word lists from the wordle website
     word_order, valid_words = get_word_banks()
 
+    # add the words in word_order to valid words
+    # we found that the words in word_order are not contained in valid_words
+    valid_words.extend(word_order)
+
+    # sort list in alphabetical order
+    valid_words.sort()
+
     # get the dictionary that maps dates to words
     d_to_w = map_date_to_word(word_order)
 
@@ -257,7 +264,7 @@ class WordLookup:
             # generate files and registry
             gen_files()
 
-
+ 
     def lookup_by_date(self, dtime:datetime) -> str:
         '''Takes in a datetime object and returns the word mapped at that date'''
         # load in the year dictionary from pickle file
@@ -266,7 +273,7 @@ class WordLookup:
         # return the word at the datetime passed
         return year_dict[dtime]   
 
-
+    
     def lookup_by_word(self, word:str) -> datetime:
         '''Takes in a word and returns the datetime object mapped at that word'''
         # load the word dictionary from pcilel file
@@ -275,7 +282,7 @@ class WordLookup:
         # return datetime at word passed
         return word_dict[word]
 
-
+  
     def get_valid_words(self) -> list:
         '''Returns the list of valid words retrieved from the website'''
         # load the valid_words list from pickle file
@@ -284,7 +291,7 @@ class WordLookup:
         # return the list
         return valid_words
 
-
+ 
     def get_word_index(self, word:str) -> int:
         '''Takes in a word and returns the index of the word in the word_order list'''
         # load the word_order list form the pickle file
@@ -293,7 +300,7 @@ class WordLookup:
         # return the index of the word
         return word_order.index(word)
 
-    
+  
     def _get_word_order(self) -> list[str]:
         word_order = load_object('word_order')
 
