@@ -10,21 +10,6 @@ FREQ_TEMPLATE = 'https://wordsapiv1.p.rapidapi.com/words/{word}/frequency'
 EXAM_TEMPLATE = 'https://wordsapiv1.p.rapidapi.com/words/{word}/examples'
 
 
-def parse_definitions(json_defs:list) -> dict:
-    grouped_defs = dict()
-    for entry in json_defs:
-        definition = entry['definition']
-        part_of_speech = entry['partOfSpeech']
-
-        try:
-            grouped_defs[part_of_speech].append(definition)
-
-        except KeyError:
-            grouped_defs[part_of_speech] = [definition]
-
-    return grouped_defs
-
-
 class WordInfo:
     def __init__(self, wotd:str) -> None:
 
@@ -41,14 +26,32 @@ class WordInfo:
         exam_json = json.loads(requests.get(EXAM_TEMPLATE.format(word = wotd), headers=api_headers).text)
         
         # store the definitions of word sorted by part of speech
-        self.definitions = parse_definitions(def_json['definitions'])
+        self.definitions = self.parse_definitions(def_json['definitions'])
 
         # store the frequency of the word on average per million words
-        self.per_million = freq_json['frequency']['perMillion']
+        self.per_million:float = freq_json['frequency']['perMillion']
 
         # store examples of the word in a sentence
-        self.examples = exam_json['examples']
+        self.examples:list = exam_json['examples']
    
+    @staticmethod
+    def parse_definitions(json_defs:list) -> dict[str, list]:
+
+        grouped_defs:dict[str, list] = dict()
+
+        for entry in json_defs:
+            definition = entry['definition']
+            part_of_speech = entry['partOfSpeech']
+
+            try:
+                grouped_defs[part_of_speech].append(definition)
+
+            except KeyError:
+                grouped_defs[part_of_speech] = [definition]
+
+        return grouped_defs
+
+
     def print_info(self):
         print('=============')
         print(f'=== {self.word} ===')
@@ -69,11 +72,10 @@ class WordInfo:
         print(f'Average frequency per 1 million words: {self.per_million}')
 
 
-
     def __str__(self) -> str:
         return f'{self.definitions = }\n{self.per_million = }\n{self.examples}'
 
 
-wi = WordInfo('treat')
+wi = WordInfo('waste')
 
 wi.print_info()

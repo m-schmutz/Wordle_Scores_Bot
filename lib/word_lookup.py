@@ -1,4 +1,4 @@
-from typing import Tuple, Union
+from typing import Tuple
 from .wordle import WebScraper
 from datetime import datetime, timedelta
 import requests
@@ -96,7 +96,7 @@ def map_word_to_date(d_to_w:dict) -> dict:
     return w_to_d
 
 
-def pkl_object(object:Union[dict, list], file_prefix):
+def pkl_object(object:dict|list, file_prefix):
     # path for the pickled
     file_path = TEMPLATE_PATH.format(prefix = file_prefix)
     
@@ -107,7 +107,7 @@ def pkl_object(object:Union[dict, list], file_prefix):
         pickle.dump(object, f)
 
 
-def load_object(file_prefix) -> Union[dict, list]:
+def load_object(file_prefix) -> dict|list:
     # get the file path for the pickled data
     file_path = TEMPLATE_PATH.format(prefix = file_prefix)
     
@@ -120,7 +120,7 @@ def load_object(file_prefix) -> Union[dict, list]:
     return object  
 
 
-def check_existing():
+def check_existing() -> bool:
     # get the parent directory path
     parent_dir = TEMPLATE_PATH[:20]
 
@@ -207,37 +207,12 @@ def store_d_to_w(d_to_w:dict) -> list:
     return registry
 
 
-def store_w_to_d(w_to_d:dict) -> str:
-    # prefix for pkl file containing reverse dictionary
-    file_prefix = 'reverse'
+def store_other(object:dict|list, prefix:str) -> str:
+    # pickle the object
+    pkl_object(object, prefix)
 
-    # store the pickled object
-    pkl_object(w_to_d, file_prefix)
-
-    # return the file_prefix
-    return file_prefix
-
-
-def store_valid_words(valid_words:list):
-    # prefix for pkl file containing valid words list
-    file_prefix = 'valid_words'
-
-    # store the pickled object
-    pkl_object(valid_words, file_prefix)
-
-    # return the file_prefix
-    return file_prefix
-
-
-def store_wordle_list(word_order:list):
-    # prefix for pkl file containing wordle_order list
-    file_prefix = 'word_order'
-
-    # store the pickled object
-    pkl_object(word_order, file_prefix)
-
-    # return the file prefix
-    return file_prefix
+    # return the prefix after the object as been successfully stored
+    return prefix
 
 
 def gen_files():
@@ -255,16 +230,16 @@ def gen_files():
     registry_list = list()
 
     # store the word_order list to files and add file prefixes to registry list
-    registry_list.append(store_wordle_list(word_order))
+    registry_list.append(store_other(word_order, 'word_order'))
 
     # store the d_to_w dictionary to files and add file prefixes to registry list
     registry_list.extend(store_d_to_w(d_to_w))
 
     # store w_to_d dictionary to file and add file prefix to the registry list
-    registry_list.append(store_w_to_d(w_to_d))
+    registry_list.append(store_other(w_to_d, 'reverse'))
 
     # store the valid words to file and add the file prefix to the registry list
-    registry_list.append(store_valid_words(valid_words))
+    registry_list.append(store_other(valid_words, 'valid_words'))
 
     # write registry list to pickle file for restart
     pkl_object(registry_list, 'registry')
@@ -319,13 +294,13 @@ class WordLookup:
         return word_order.index(word)
 
     
-    def _get_word_order(self) -> 'list[str]':
+    def _get_word_order(self) -> list[str]:
         word_order = load_object('word_order')
 
         return word_order
 
 
-    def _get_valid_words(self) -> 'list[str]':
+    def _get_valid_words(self) -> list[str]:
         valid_words = load_object('valid_words')
 
         return valid_words

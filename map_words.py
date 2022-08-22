@@ -1,4 +1,4 @@
-#!./venv/bin/python3
+#!./venv/bin/python3.10
 from lib.word_lookup import WordLookup
 from datetime import datetime
 
