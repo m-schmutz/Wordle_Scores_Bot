@@ -3,8 +3,7 @@ from credentials import bot_token, server_id
 from discord import Interaction, Attachment, ButtonStyle, app_commands
 from discord.ui import Button, View
 # from chimp import ChimpView
-from database import DoubleSubmit
-from wordle import SubmissionReply, InvalidGame, WordleBot
+from wordle import SubmissionReply, InvalidGame, WordleBot, DoubleSubmit
 
 def main() -> None:
     bot = WordleBot(server_id)
