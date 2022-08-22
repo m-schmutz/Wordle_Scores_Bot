@@ -298,9 +298,3 @@ class WordLookup:
         word_order = load_object('word_order')
 
         return word_order
-
-
-    def _get_valid_words(self) -> list[str]:
-        valid_words = load_object('valid_words')
-
-        return valid_words
