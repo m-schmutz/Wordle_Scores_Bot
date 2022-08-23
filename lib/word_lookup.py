@@ -10,6 +10,12 @@ class WordLookup:
     '''
     WordLookup class. Provides an API for getting words and dates from the wordle website
     Words are stored in pickle files
+    #### Methods
+    ---
+    - lookup_by_date(): Given a datetime object, the method returns the word that is mapped at that date
+    - lookup_by_word(): Given a word, the method will return the datetime object that is mapped at that word
+    - get_valid_words(): Method returns the list of valid words that wordle will accept as guesses
+    - get_word_index(): Given a word, the method will return the index of the word contained in word_order
     '''
 
     def __init__(self) -> None:

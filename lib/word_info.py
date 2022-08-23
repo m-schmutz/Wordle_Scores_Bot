@@ -6,7 +6,7 @@ import json
 class WordInfo:
     '''
     Given a word, the object will store the word's definitions, examples and average frequency per 1 million words
-    Members:
+    #### Members:
     ---
     - WordInfo.word: The word that the info is stored about
     - WordInfo.definitions: A dictionary that maps the part of speech to the related definitions (stored in a list)
