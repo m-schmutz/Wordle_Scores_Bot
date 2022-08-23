@@ -3,11 +3,16 @@ import requests
 from credentials import api_headers
 import json
 
-
-
-
 class WordInfo:
-
+    '''
+    Given a word, the object will store the word's definitions, examples and average frequency per 1 million words
+    Members:
+    ---
+    - WordInfo.word: The word that the info is stored about
+    - WordInfo.definitions: A dictionary that maps the part of speech to the related definitions (stored in a list)
+    - WordInfo.examples: A list of examples of the words usage
+    - WordInfo.per_million: A float representing the average frequency of the word per 1 million words
+    '''
     def __init__(self, wotd:str) -> None:
 
         # store the word that all the info will be for
