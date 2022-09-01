@@ -1,8 +1,8 @@
 from typing import Tuple
 from lib.wordle import WordleScraper
 from datetime import datetime, timedelta
-import requests
-import re
+from requests import get
+from re import search, findall
 import pickle
 import os
 
@@ -109,16 +109,16 @@ class WordLookup:
 
     def _get_word_banks(self) -> Tuple[list, list]:
         # get the webpage source as text from the website
-        web_source_txt = requests.get('https://www.nytimes.com/games/wordle/index.html').text
+        web_source_txt = get('https://www.nytimes.com/games/wordle/index.html').text
 
         # extract the javascript file link from the page source
-        js_file_link = re.search('https://www.nytimes.com/games-assets/v2/wordle.[\w]{40}.js', web_source_txt).group()
+        js_file_link = search('https://www.nytimes.com/games-assets/v2/wordle.[\w]{40}.js', web_source_txt).group()
 
         # get the javascript file text from the link aquired in the previous step
-        js_file_txt = requests.get(js_file_link).text
+        js_file_txt = get(js_file_link).text
 
         # get the banks from the javascript file
-        banks = re.findall('\[((["][a-z]{5}["][,]?){50,})\]', js_file_txt)
+        banks = findall('\[((["][a-z]{5}["][,]?){50,})\]', js_file_txt)
 
         # remove the banks returned from tuples and fix formatting
         word_order = banks[0][0].replace('"', '').split(',')
