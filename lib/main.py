@@ -1,32 +1,25 @@
 from random import randint
+from discord import Interaction, Attachment, app_commands
+from wordle import SubmissionEmbed, InvalidGame, WordleBot, DoubleSubmit, LinkView
 from credentials import bot_token, server_id
-from discord import Interaction, Attachment, ButtonStyle, app_commands
-from discord.ui import Button, View
-# from chimp import ChimpView
-from wordle import SubmissionReply, InvalidGame, WordleBot, DoubleSubmit
 
 def main() -> None:
     bot = WordleBot(server_id)
+    slash_cmd = bot.tree.command
 
-    ### Discord Bot Application Commands
-    @bot.tree.command(name='submit',
-        description= 'Submit a screenshot of your Wordle game!',
-        guild= bot.guild)
-    async def _(interaction: Interaction, image: Attachment):
+    @slash_cmd(description='Submit a screenshot of your Wordle game!', guild=bot.guild)
+    async def submit(interaction: Interaction, image: Attachment) -> None:
 
-        # Grab date of submission.
+        # Grab date of submission and try to score the game. If the game
+        # cannot be processed, reply with an error message and return.
         date = interaction.created_at.astimezone().date()
-
-        # Attempt to score the game.
-        # If it cannot be scored, reply accordingly.
         try:
             game = bot.scoreGame(await image.read(), date)
         except InvalidGame as e:
-            await interaction.response.send_message(content=e.message, ephemeral=True)
-            return
+            return await interaction.response.send_message(content=e.message, ephemeral=True)
 
-        # Attempt to submit scores to database.
-        # If the user has already submit today's game, reply accordingly.
+        # Submit scores to database. If the user has already submit
+        # today, then reply with an error message and return.
         try:
             baseStats = bot.db.submit_data(
                 username= str(interaction.user),
@@ -37,12 +30,11 @@ def main() -> None:
                 yellows= game.uniqueMisplaced,
                 uniques= game.uniqueAll)
         except DoubleSubmit as e:
-            await interaction.response.send_message(content=e.message, ephemeral=True)
-            return
+            return await interaction.response.send_message(content=e.message, ephemeral=True)
 
-        # Reply with stats
+        # Reply to user's submission with stats.
         await interaction.response.send_message(
-            embed= SubmissionReply(
+            embed= SubmissionEmbed(
                 username= interaction.user.name,
                 stats= baseStats),
             file= await image.to_file(spoiler=True))
@@ -53,32 +45,14 @@ def main() -> None:
                 numGuesses= game.numGuesses),
             ephemeral= True)
 
-    # @bot.tree.command(name='chimp',
-    #     description= 'Are you smarter than a chimp? Play this quick memorization game to find out!',
-    #     guild= bot.guild)
-    # async def _(interaction: Interaction):
-    #     chimp = ChimpView()
-    #     await interaction.response.send_message(view=chimp)
+    @slash_cmd(description='Get the link to the Wordle webpage.', guild=bot.guild)
+    async def link(interaction: Interaction) -> None:
+        await interaction.response.send_message(view= LinkView(), ephemeral= True)
 
-    @bot.tree.command(name='link',
-        description= 'Get the link to the Wordle webpage.',
-        guild= bot.guild)
-    async def _(interaction: Interaction):
-        await interaction.response.send_message(
-            view= View(timeout=0).add_item(
-                Button(
-                    label= 'Play Wordle',
-                    style= ButtonStyle.link,
-                    url= 'https://www.nytimes.com/games/wordle/index.html')),
-            ephemeral= True)
-
-    @bot.tree.command(name='roll',
-        description= 'Roll an N-sided die!',
-        guild= bot.guild)
-    async def _(interaction: Interaction, faces: app_commands.Range[int, 2, None]):
+    @slash_cmd(description='Roll an N-sided die!', guild=bot.guild)
+    async def roll(interaction: Interaction, faces: app_commands.Range[int, 2, None]) -> None:
         await interaction.response.send_message(f'You rolled a {randint(1, faces)}!')
 
-    ### Start the bot
     bot.run(bot_token)
 
 if __name__ == '__main__':

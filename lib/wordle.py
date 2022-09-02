@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
 import discord
-from discord import Intents, Object
+from discord import Intents, Object, ButtonStyle
+from discord.ui import Button, View
 from discord.ext import commands
 from selenium import webdriver
 from selenium.webdriver.firefox.service import Service
@@ -18,14 +19,12 @@ from random import choice
 from os import path, mkdir
 
 from requests import get
-from credentials import api_headers
 from json import loads
-
 from re import search, findall
 from pickle import load, dump
+from credentials import api_headers
 
 import ansi
-
 
 def timer(func):
     def _inner(*args, **kwargs):
@@ -37,10 +36,30 @@ def timer(func):
     return _inner
 
 
+### Descriptor/Lightweight Classes
 
-# set DBLSUB_DISABLED to True if you want to ignore double submits
-DBLSUB_DISABLED = False
+class InvalidGame(Exception):
+    def __init__(self, message: str, *args: object) -> None:
+        super().__init__(*args)
+        self.message = message
 
+class DoubleSubmit(Exception):
+    '''Exception raised if user attempts to submit twice on the same day'''
+    
+    # takes in username to print out whihc user is attempting to submit twice 
+    def __init__(self, username) -> None:
+        self.username = username    
+        self.message = 'You already submit today\'s game :)'
+
+    # set __module__ to exception module (nice print out message)
+    ## this can be taken out later
+    __module__ = Exception.__module__
+    
+    # print string including username of user that has attempted to submit twice
+    def __str__(self):
+        return f'{self.username} has already submitted today'
+
+@dataclass
 class BaseStats:
     """Default statistics to return upon a submission.
 
@@ -50,12 +69,20 @@ class BaseStats:
     - win %
     - streak
     - max streak"""
-    def __init__(self, distro_str:str, games_played:int, win_rate:float, streak:int, max_streak:int) -> None:
-        self.guess_distro = dict( (k,v) for k,v in zip(range(1,7), map(int, distro_str.split())))
-        self.games_played = int(games_played)
-        self.win_rate = float(win_rate) * 100
-        self.streak = int(streak)
-        self.max_streak = int(max_streak)
+
+    guess_distro: str | dict
+    games_played: int
+    win_rate: float
+    streak: int
+    max_streak: int
+
+    def __post_init__(self):
+        # Convert guess distribution from str to dict
+        self.guess_distro = {
+            k: v
+            for k,v in zip(
+                range(1,7),
+                map(int, self.guess_distro.split())) }
 
 class FullStats(BaseStats):
     '''FullStats for a user
@@ -108,6 +135,66 @@ class FullStats(BaseStats):
         self.yellow_rate = float(yellow_rate) * 100
         self.last_win = datetime.strptime(str(last_win), '%Y%m%d').date()
 
+class Score(Enum):
+    CORRECT = auto()
+    MISPLACED = auto()
+    INCORRECT = auto()
+
+    def __repr__(self) -> str:
+        match self:
+            case Score.CORRECT:
+                return ansi.green(self.name[0])
+            case Score.MISPLACED:
+                return ansi.yellow(self.name[0])
+            case Score.INCORRECT:
+                return ansi.bright_black(self.name[0])
+
+        raise AssertionError(f'Unexpected Score "{self.name}"')
+
+class SubmissionEmbed(discord.Embed):
+    def __init__(self, username: str, stats: BaseStats):
+        super().__init__(
+            color= discord.Color.random(),
+            title= f'Results for **{username}**',
+            description= None,
+            timestamp= None)
+
+        # self.set_image(url='https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fimgc.allpostersimages.com%2Fimg%2Fposters%2Fsteve-buscemi-smiling-in-close-up-portrait_u-L-Q1171600.jpg%3Fh%3D550%26p%3D0%26w%3D550%26background%3Dffffff&f=1&nofb=1')
+        self.add_field(name='Guess Distribution', value=stats.guess_distro, inline=False
+            ).add_field(name='Games Played', value=stats.games_played, inline=False
+            ).add_field(name='Win Rate', value=f'{stats.win_rate:.02f}%', inline=False
+            ).add_field(name='Streak', value=stats.streak, inline=False
+            ).add_field(name='Max Streak', value=stats.max_streak, inline=False)
+
+class LinkView(View):
+    def __init__(self):
+        super().__init__(timeout=0)
+        self.add_item(Button(
+            label= 'Play Wordle',
+            style= ButtonStyle.link,
+            url= 'https://www.nytimes.com/games/wordle/index.html'))
+
+@dataclass
+class GameStats:
+    """Game stats DTO"""
+
+    guessTable: np.ndarray
+    numGuesses: int
+    solution: str
+    won: bool
+    uniqueCorrect: int
+    uniqueMisplaced: int
+    uniqueAll: int
+    totalCorrect: int
+    totalMisplaced: int
+
+
+
+# set DBLSUB_DISABLED to True if you want to ignore double submits
+DBLSUB_DISABLED = False
+
+### Functional Classes
+
 class UpdateValues:
     def __init__(self, raw:Tuple, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> None:
         
@@ -133,22 +220,20 @@ class UpdateValues:
         # uniques update value
         self._uniques_update = _uniques + uniques
 
-        # increment streak if user has solved consecutively; otherwise streak will not be incremented
-        _continue_streak = (date - _last_win) == 1 
-
         # last solve is set to current date if wordle solved; otherwise last solve stays the same
         self._last_win_update = date if win else _last_win
 
 
-        # increment streak 
-        if win and _continue_streak:
-            self._streak_update = _curr_streak + 1
-        
-        # set streak to 1 if this is the start of a new streak
-        elif win:
-            self._streak_update = 1
 
-        # set streka to 0 if user did not solve wordle today
+        # increment streak if user has solved consecutively; otherwise streak will not be incremented
+        # else set streak to 1 if this is the start of a new streak
+        if win:
+            if date - _last_win == 1:
+                self._streak_update = _curr_streak + 1
+            else:
+                self._streak_update = 1
+
+        # set streak to 0 if user did not solve wordle today
         else:
             self._streak_update = 0
 
@@ -184,22 +269,6 @@ class UpdateValues:
 
         # yellow rate update value 
         self._yellow_rate_update = self._yellows_update / self._uniques_update
-
-class DoubleSubmit(Exception):
-    '''Exception raised if user attempts to submit twice on the same day'''
-    
-    # takes in username to print out whihc user is attempting to submit twice 
-    def __init__(self, username) -> None:
-        self.username = username    
-        self.message = 'You already submit today\'s game :)'
-
-    # set __module__ to exception module (nice print out message)
-    ## this can be taken out later
-    __module__ = Exception.__module__
-    
-    # print string including username of user that has attempted to submit twice
-    def __str__(self):
-        return f'{self.username} has already submitted today'
 
 class BotDatabase:
     '''Database class. Contains one member _database. 
@@ -268,17 +337,16 @@ class BotDatabase:
         _cur = self._database.cursor()
 
         # get fields needed calculate updated stats for this user
-        _raw = _cur.execute(f'''SELECT games, 
-                                       wins, 
-                                       guesses, 
-                                       greens, 
-                                       yellows, 
-                                       uniques, 
-                                       guess_distro, 
-                                       last_win, 
-                                       curr_streak, 
-                                       max_streak FROM User_Data WHERE username = '{username}';''').fetchone()
-                
+        _raw = _cur.execute(f'''
+            SELECT
+                games, wins, guesses, greens, yellows, uniques,
+                guess_distro, last_win, curr_streak, max_streak
+            FROM
+                User_Data
+            WHERE
+                username = '{username}';
+            ''').fetchone()
+
         # create update values object. This will calculate all the updated stats
         vals = UpdateValues(_raw, win, guesses, greens, yellows, uniques, date)
 
@@ -441,20 +509,15 @@ class BotDatabase:
         _cur = self._database.cursor()
 
         # get all data fields for the specified user
-        _raw = _cur.execute(f'''SELECT games, 
-                                       wins,
-                                       guesses, 
-                                       greens, 
-                                       yellows, 
-                                       uniques, 
-                                       guess_distro,
-                                       last_win,
-                                       curr_streak, 
-                                       max_streak,
-                                       win_rate, 
-                                       avg_guesses,
-                                       green_rate, 
-                                       yellow_rate FROM User_Data CROSS JOIN User_Stats WHERE User_Data.username = '{username}';''').fetchone()
+        _raw = _cur.execute(f'''
+            SELECT
+                games, wins, guesses, greens, yellows, uniques, guess_distro, last_win,
+                curr_streak, max_streak, win_rate, avg_guesses, green_rate, yellow_rate
+            FROM
+                User_Data CROSS JOIN User_Stats
+            WHERE
+                User_Data.username = '{username}';
+            ''').fetchone()
         
         # close the cursor
         _cur.close()
@@ -462,59 +525,7 @@ class BotDatabase:
         # return FullStats object
         return FullStats(_raw)
 
-
-
-@dataclass
-class Game:
-    """Game stats DTO"""
-
-    guessTable: np.ndarray
-    numGuesses: int
-    solution: str
-    won: bool
-    uniqueCorrect: int
-    uniqueMisplaced: int
-    uniqueAll: int
-    totalCorrect: int
-    totalMisplaced: int
-
-class InvalidGame(Exception):
-    def __init__(self, message: str, *args: object) -> None:
-        super().__init__(*args)
-        self.message = message
-
-class Score(Enum):
-    CORRECT = auto()
-    MISPLACED = auto()
-    INCORRECT = auto()
-
-    def __repr__(self) -> str:
-        match self:
-            case Score.CORRECT:
-                return ansi.green(self.name[0])
-            case Score.MISPLACED:
-                return ansi.yellow(self.name[0])
-            case Score.INCORRECT:
-                return ansi.bright_black(self.name[0])
-
-        raise AssertionError(f'Unexpected Score "{self.name}"')
-
-class SubmissionReply(discord.Embed):
-    def __init__(self, username: str, stats: BaseStats):
-        super().__init__(
-            color= discord.Color.random(),
-            title= f'>>> Results for {username}',
-            description= None,
-            timestamp= None)
-
-        # self.set_image(url='https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fimgc.allpostersimages.com%2Fimg%2Fposters%2Fsteve-buscemi-smiling-in-close-up-portrait_u-L-Q1171600.jpg%3Fh%3D550%26p%3D0%26w%3D550%26background%3Dffffff&f=1&nofb=1')
-        self.add_field(name='Guess Distribution', value=stats.guess_distro, inline=False)
-        self.add_field(name='Games Played', value=stats.games_played, inline=False)
-        self.add_field(name='Win Rate', value=f'{stats.win_rate:.02f}%', inline=False)
-        self.add_field(name='Streak', value=stats.streak, inline=False)
-        self.add_field(name='Max Streak', value=stats.max_streak, inline=False)
-
-class _Scraper:
+class WOTDScraper:
     """Keeps track of the Word of the Day. Uses Selenium to scrape the NYTimes Wordle webpage."""
 
     def __init__(self) -> None:
@@ -562,21 +573,12 @@ class WordleBot(commands.Bot):
             intents= Intents.all(),
             help_command= None)
         self._tessConfig = '--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-        self._maxThresh = 255
-        self._darkThresh = 0x26
-        self._lightThresh = 0xeb
-        # Dark Theme:
-        #   BG = 0x121213 (0x12 grayscale)
-        #   Next darkest = 0x3a3a3c (0x3a grayscale)
-        #   => midpoint = 0x26
-        # Light Theme:
-        #   BG = 0xffffff (0xff grayscale)
-        #   Next lightest = 0xd3d6da (0xd6 grayscale)
-        #   => midpoint = 0xeb
-
+        self._maxThresh = 255 # maximum pixel value
+        self._darkThresh = 0x26 # midpoint between the BG and the next darkest color
+        self._lightThresh = 0xeb # midpoint between the BG and the next brightest color
         self.synced = False
         self.guild = Object(id=server_id)
-        self.scraper = _Scraper()
+        self.scraper = WOTDScraper()
         self.db = BotDatabase(db_path='./lib/stats.db')
 
     def _guessesFromImage(self, image: bytes) -> np.ndarray:
@@ -657,7 +659,6 @@ class WordleBot(commands.Bot):
         guess_list = text.strip().lower().split('\n')
 
         # Validate guesses
-        from word_lookup import WordLookup
         valid_words = set(WordLookup().get_valid_words())
         for guess in guess_list:
             if guess not in valid_words:
@@ -695,8 +696,8 @@ class WordleBot(commands.Bot):
             'I\'d say better luck next time, but you clearly don\'t have any luck.',
             'Maybe [this](https://freekidsbooks.org/reading-level/children/) can help you.'))
 
-    def scoreGame(self, image: bytes, submissionDate: datetime) -> Game:
-        """Parse a screenshot of a Wordle game and return a Game object containing
+    def scoreGame(self, image: bytes, submissionDate: datetime) -> GameStats:
+        """Parse a screenshot of a Wordle game and return a GameStats object containing
         information about the results.
         
         ---
@@ -711,7 +712,7 @@ class WordleBot(commands.Bot):
         ---
         ## Returns
 
-        object : `Game`
+        object : `GameStats`
             DTO for easy use of various game stats.
         """
 
@@ -756,7 +757,7 @@ class WordleBot(commands.Bot):
                 #(2/2) ...finish adding unique chars
                 uniques[col].add(gc)
 
-        return Game(
+        return GameStats(
             guessTable= guesses,
             numGuesses= guesses.shape[0],
             solution= wotd,
@@ -779,8 +780,6 @@ class WordleBot(commands.Bot):
             self.synced = True
 
         print(f'{self.user} ready!')
-
-
 
 class WordInfo:
     '''
@@ -985,7 +984,7 @@ class WordLookup:
 
     def _get_wotd(self) -> str:
         # create a wotd_scraper object. This will get the wotd on creation
-        scraper = WordleScraper()
+        scraper = WOTDScraper()
 
         # return the word of the day 
         return scraper._wotd
