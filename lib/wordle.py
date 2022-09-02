@@ -18,14 +18,13 @@ from random import choice
 from os import path, mkdir
 
 from requests import get
-from lib.credentials import api_headers
+from credentials import api_headers
 from json import loads
 
-from typing import Tuple
 from re import search, findall
 from pickle import load, dump
 
-import lib.ansi as ansi
+import ansi
 
 
 def timer(func):
@@ -57,7 +56,6 @@ class BaseStats:
         self.win_rate = float(win_rate) * 100
         self.streak = int(streak)
         self.max_streak = int(max_streak)
-
 
 class FullStats(BaseStats):
     '''FullStats for a user
@@ -109,7 +107,6 @@ class FullStats(BaseStats):
         self.green_rate = float(green_rate) * 100
         self.yellow_rate = float(yellow_rate) * 100
         self.last_win = datetime.strptime(str(last_win), '%Y%m%d').date()
-
 
 class UpdateValues:
     def __init__(self, raw:Tuple, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> None:
@@ -188,7 +185,6 @@ class UpdateValues:
         # yellow rate update value 
         self._yellow_rate_update = self._yellows_update / self._uniques_update
 
-
 class DoubleSubmit(Exception):
     '''Exception raised if user attempts to submit twice on the same day'''
     
@@ -204,7 +200,6 @@ class DoubleSubmit(Exception):
     # print string including username of user that has attempted to submit twice
     def __str__(self):
         return f'{self.username} has already submitted today'
-
 
 class BotDatabase:
     '''Database class. Contains one member _database. 
@@ -483,12 +478,10 @@ class WordleGame:
     totalCorrect: int
     totalMisplaced: int
 
-
 class InvalidGame(Exception):
     def __init__(self, reason: str, *args: object) -> None:
         super().__init__(*args)
         self.reason = reason
-
 
 class CharScore(Enum):
     CORRECT = auto()
@@ -506,7 +499,6 @@ class CharScore(Enum):
 
         raise AssertionError(f'Unexpected CharScore "{self.name}"')
 
-
 class SubmissionReply(discord.Embed):
     def __init__(self, username: str, stats: BaseStats):
         super().__init__(
@@ -521,7 +513,6 @@ class SubmissionReply(discord.Embed):
         self.add_field(name='Win Rate', value=f'{stats.win_rate:.02f}%', inline=False)
         self.add_field(name='Streak', value=stats.streak, inline=False)
         self.add_field(name='Max Streak', value=stats.max_streak, inline=False)
-
 
 class WordleScraper:
     """Keeps track of the Word of the Day. Uses Selenium to scrape the NYTimes Wordle webpage."""
@@ -563,7 +554,6 @@ class WordleScraper:
                 return prev_wotd
 
         return self._wotd
-
 
 class WordleBot(commands.Bot):
     def __init__(self, server_id: int) -> None:
@@ -791,6 +781,7 @@ class WordleBot(commands.Bot):
         print(f'{self.user} ready!')
 
 
+
 class WordInfo:
     '''
     Given a word, the object will store the word's definitions, examples and average frequency per 1 million words
@@ -869,7 +860,6 @@ class WordInfo:
 
     def __str__(self) -> str:
         return f'{self.definitions = }\n{self.per_million = }\n{self.examples = }'
-
 
 class WordLookup:
     '''
