@@ -22,7 +22,7 @@ def main() -> None:
         try:
             game = bot.scoreGame(await image.read(), date)
         except InvalidGame as e:
-            await interaction.response.send_message(content=e.reason, ephemeral=True)
+            await interaction.response.send_message(content=e.message, ephemeral=True)
             return
 
         # Attempt to submit scores to database.

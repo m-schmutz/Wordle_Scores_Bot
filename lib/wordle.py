@@ -38,8 +38,8 @@ def timer(func):
 
 
 
-# set DBLSUB_ENABLED to True if you want to ignore double submits
-DBLSUB_ENABLED = False
+# set DBLSUB_DISABLED to True if you want to ignore double submits
+DBLSUB_DISABLED = False
 
 class BaseStats:
     """Default statistics to return upon a submission.
@@ -421,7 +421,7 @@ class BotDatabase:
             _last_submit, = _raw
 
             # check if this user has already submitted this day
-            if _last_submit == _date and not DBLSUB_ENABLED:
+            if _last_submit == _date and not DBLSUB_DISABLED:
 
                 # raise DoubleSubmit exception
                 raise DoubleSubmit(username)
@@ -465,7 +465,7 @@ class BotDatabase:
 
 
 @dataclass
-class WordleGame:
+class Game:
     """Game stats DTO"""
 
     guessTable: np.ndarray
@@ -479,25 +479,25 @@ class WordleGame:
     totalMisplaced: int
 
 class InvalidGame(Exception):
-    def __init__(self, reason: str, *args: object) -> None:
+    def __init__(self, message: str, *args: object) -> None:
         super().__init__(*args)
-        self.reason = reason
+        self.message = message
 
-class CharScore(Enum):
+class Score(Enum):
     CORRECT = auto()
     MISPLACED = auto()
     INCORRECT = auto()
 
     def __repr__(self) -> str:
         match self:
-            case CharScore.CORRECT:
+            case Score.CORRECT:
                 return ansi.green(self.name[0])
-            case CharScore.MISPLACED:
+            case Score.MISPLACED:
                 return ansi.yellow(self.name[0])
-            case CharScore.INCORRECT:
+            case Score.INCORRECT:
                 return ansi.bright_black(self.name[0])
 
-        raise AssertionError(f'Unexpected CharScore "{self.name}"')
+        raise AssertionError(f'Unexpected Score "{self.name}"')
 
 class SubmissionReply(discord.Embed):
     def __init__(self, username: str, stats: BaseStats):
@@ -514,7 +514,7 @@ class SubmissionReply(discord.Embed):
         self.add_field(name='Streak', value=stats.streak, inline=False)
         self.add_field(name='Max Streak', value=stats.max_streak, inline=False)
 
-class WordleScraper:
+class _Scraper:
     """Keeps track of the Word of the Day. Uses Selenium to scrape the NYTimes Wordle webpage."""
 
     def __init__(self) -> None:
@@ -576,7 +576,7 @@ class WordleBot(commands.Bot):
 
         self.synced = False
         self.guild = Object(id=server_id)
-        self.scraper = WordleScraper()
+        self.scraper = _Scraper()
         self.db = BotDatabase(db_path='./lib/stats.db')
 
     def _guessesFromImage(self, image: bytes) -> np.ndarray:
@@ -695,8 +695,8 @@ class WordleBot(commands.Bot):
             'I\'d say better luck next time, but you clearly don\'t have any luck.',
             'Maybe [this](https://freekidsbooks.org/reading-level/children/) can help you.'))
 
-    def scoreGame(self, image: bytes, submissionDate: datetime) -> WordleGame:
-        """Parse a screenshot of a Wordle game and return a WordleGame object containing
+    def scoreGame(self, image: bytes, submissionDate: datetime) -> Game:
+        """Parse a screenshot of a Wordle game and return a Game object containing
         information about the results.
         
         ---
@@ -711,7 +711,7 @@ class WordleBot(commands.Bot):
         ---
         ## Returns
 
-        object : `WordleGame`
+        object : `Game`
             DTO for easy use of various game stats.
         """
 
@@ -723,7 +723,7 @@ class WordleBot(commands.Bot):
         guesses = self._guessesFromImage(image)
         wotd = self.scraper.wotd(submissionDate)
         counts = Counter(wotd)
-        scores = np.full(shape=guesses.shape, fill_value=CharScore.INCORRECT)
+        scores = np.full(shape=guesses.shape, fill_value=Score.INCORRECT)
         uniques = [set() for _ in range(5)]
         tC = tM = uC = uM = 0
         for row, guess in enumerate(guesses):
@@ -733,7 +733,7 @@ class WordleBot(commands.Bot):
             # score CORRECT LETTERS in CORRECT POSITION (Green)
             for col, gc, wc in zip(range(5), guess, wotd):
                 if gc == wc:
-                    scores[row,col] = CharScore.CORRECT
+                    scores[row,col] = Score.CORRECT
                     _counts[gc] -= 1
                     tC += 1
 
@@ -747,7 +747,7 @@ class WordleBot(commands.Bot):
             # score CORRECT LETTERS in WRONG POSITION (Yellow)
             for row, col, gc in remaining:
                 if gc in wotd and _counts[gc] > 0:
-                    scores[row,col] = CharScore.MISPLACED
+                    scores[row,col] = Score.MISPLACED
                     _counts[gc] -= 1
                     tM += 1
                     if gc not in uniques[col]:
@@ -756,11 +756,11 @@ class WordleBot(commands.Bot):
                 #(2/2) ...finish adding unique chars
                 uniques[col].add(gc)
 
-        return WordleGame(
+        return Game(
             guessTable= guesses,
             numGuesses= guesses.shape[0],
             solution= wotd,
-            won= all(s == CharScore.CORRECT for s in scores[-1]),
+            won= all(s == Score.CORRECT for s in scores[-1]),
             uniqueCorrect= uC,
             uniqueMisplaced= uM,
             uniqueAll= sum(len(set) for set in uniques),
