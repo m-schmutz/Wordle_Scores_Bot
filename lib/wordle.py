@@ -22,9 +22,21 @@ from requests import get
 from json import loads
 from re import search, findall
 from pickle import load, dump
-from credentials import api_headers
 
-import ansi
+
+# first assume that wordle is being imported from outside lib
+# otherwise import from within lib
+try:
+    from lib.credentials import api_headers
+except ImportError:
+    from credentials import api_headers
+
+try:
+    from . import ansi
+except ImportError:
+    import ansi
+
+
 
 def timer(func):
     def _inner(*args, **kwargs):
@@ -38,10 +50,12 @@ def timer(func):
 
 ### Descriptor/Lightweight Classes
 
+
 class InvalidGame(Exception):
     def __init__(self, message: str, *args: object) -> None:
         super().__init__(*args)
         self.message = message
+
 
 class DoubleSubmit(Exception):
     '''Exception raised if user attempts to submit twice on the same day'''
@@ -59,6 +73,10 @@ class DoubleSubmit(Exception):
     def __str__(self):
         return f'{self.username} has already submitted today'
 
+################################################################################################################################################
+# BaseStats class:
+# used to store a user's base stats
+################################################################################################################################################
 @dataclass
 class BaseStats:
     """Default statistics to return upon a submission.
@@ -84,6 +102,10 @@ class BaseStats:
                 range(1,7),
                 map(int, self.guess_distro.split())) }
 
+################################################################################################################################################
+# FullStats class:
+# used to store a user's full stats
+################################################################################################################################################
 class FullStats(BaseStats):
     '''FullStats for a user
     
@@ -135,6 +157,10 @@ class FullStats(BaseStats):
         self.yellow_rate = float(yellow_rate) * 100
         self.last_win = datetime.strptime(str(last_win), '%Y%m%d').date()
 
+################################################################################################################################################
+# Score class:
+# lol idk
+################################################################################################################################################
 class Score(Enum):
     CORRECT = auto()
     MISPLACED = auto()
@@ -151,6 +177,10 @@ class Score(Enum):
 
         raise AssertionError(f'Unexpected Score "{self.name}"')
 
+################################################################################################################################################
+# SubmissionEmbed class:
+# used to display a users results after a game
+################################################################################################################################################
 class SubmissionEmbed(discord.Embed):
     def __init__(self, username: str, stats: BaseStats):
         super().__init__(
@@ -166,6 +196,10 @@ class SubmissionEmbed(discord.Embed):
             ).add_field(name='Streak', value=stats.streak, inline=False
             ).add_field(name='Max Streak', value=stats.max_streak, inline=False)
 
+################################################################################################################################################
+# LinkView class:
+# used to display the wordle website in discord
+################################################################################################################################################
 class LinkView(View):
     def __init__(self):
         super().__init__(timeout=0)
@@ -174,6 +208,10 @@ class LinkView(View):
             style= ButtonStyle.link,
             url= 'https://www.nytimes.com/games/wordle/index.html'))
 
+################################################################################################################################################
+# GameStats class:
+# used to store stats of a submitted game
+################################################################################################################################################
 @dataclass
 class GameStats:
     """Game stats DTO"""
@@ -189,12 +227,15 @@ class GameStats:
     totalMisplaced: int
 
 
-
 # set DBLSUB_DISABLED to True if you want to ignore double submits
 DBLSUB_DISABLED = False
 
 ### Functional Classes
 
+################################################################################################################################################
+# Updatevalues class:
+# used to update a user's stats for the database
+################################################################################################################################################
 class UpdateValues:
     def __init__(self, raw:Tuple, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> None:
         
@@ -270,6 +311,10 @@ class UpdateValues:
         # yellow rate update value 
         self._yellow_rate_update = self._yellows_update / self._uniques_update
 
+################################################################################################################################################
+# BotDatabase class:
+# used to access and manipulate data in the wordle bot database
+################################################################################################################################################
 class BotDatabase:
     '''Database class. Contains one member _database. 
     _database is a sqlite3 database connection where data is stored.
@@ -525,6 +570,10 @@ class BotDatabase:
         # return FullStats object
         return FullStats(_raw)
 
+################################################################################################################################################
+# WOTDScraper class:
+# used to get the wotd from the wordle website using selenium webscraping
+################################################################################################################################################
 class WOTDScraper:
     """Keeps track of the Word of the Day. Uses Selenium to scrape the NYTimes Wordle webpage."""
 
@@ -566,6 +615,10 @@ class WOTDScraper:
 
         return self._wotd
 
+################################################################################################################################################
+# WordleBot class:
+# Driver code for the Wordle Bot
+################################################################################################################################################
 class WordleBot(commands.Bot):
     def __init__(self, server_id: int) -> None:
         super().__init__(
@@ -781,6 +834,11 @@ class WordleBot(commands.Bot):
 
         print(f'{self.user} ready!')
 
+################################################################################################################################################
+# WordInfo class:
+# used to collect and store the information on a given word
+# stores a word's definition, example sentences and average frequency of use
+################################################################################################################################################
 class WordInfo:
     '''
     Given a word, the object will store the word's definitions, examples and average frequency per 1 million words
@@ -860,6 +918,10 @@ class WordInfo:
     def __str__(self) -> str:
         return f'{self.definitions = }\n{self.per_million = }\n{self.examples = }'
 
+################################################################################################################################################
+# WordLookup class:
+# used to look up the day that a word was wotd or what the wotd is on a specific date
+################################################################################################################################################
 class WordLookup:
     '''
     WordLookup class. Provides an API for getting words and dates from the wordle website
@@ -888,6 +950,14 @@ class WordLookup:
         return year_dict[dtime]   
 
     
+    def get_todays_word(self) -> str:
+        # get today's date as a datetime object
+        today = datetime.now().date()
+
+        # return the word mapped to todays date
+        return self.lookup_by_date(today)
+
+
     def lookup_by_word(self, word:str) -> datetime:
         '''Takes in a word and returns the datetime object mapped at that word'''
         # load the word dictionary from pcilel file
