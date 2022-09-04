@@ -24,18 +24,9 @@ from re import search, findall
 from pickle import load, dump
 
 
-# first assume that wordle is being imported from outside lib
-# otherwise import from within lib
-try:
-    from lib.credentials import api_headers
-except ImportError:
-    from credentials import api_headers
-
-try:
-    from . import ansi
-except ImportError:
-    import ansi
-
+# import local modules
+from credentials import api_headers
+import ansi
 
 
 def timer(func):
