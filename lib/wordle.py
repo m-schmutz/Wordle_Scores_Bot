@@ -623,7 +623,7 @@ class WordleBot(commands.Bot):
         self.synced = False
         self.guild = Object(id=server_id)
         self.scraper = WOTDScraper()
-        self.db = BotDatabase(db_path='./lib/stats.db')
+        self.db = BotDatabase(db_path='./lib/bot_database/stats.db')
 
     def _guessesFromImage(self, image: bytes) -> np.ndarray:
         """Use Tesseract to compile a list of the guesses.

@@ -11,3 +11,4 @@ lib/wordle_pickles/
 test.py
 runningavg.py
 *.db
+lib/bot_database/
