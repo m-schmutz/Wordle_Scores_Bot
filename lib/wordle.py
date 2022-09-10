@@ -572,7 +572,7 @@ class WOTDScraper:
         opts = webdriver.FirefoxOptions()
         opts.headless = True
         opts.page_load_strategy = 'eager'
-        serv = Service(log_path='./lib/geckodriver.log')
+        serv = Service(log_path='./lib/logs/geckodriver.log')
 
         self._driver = webdriver.Firefox(options=opts, service=serv)
         self._url = 'https://www.nytimes.com/games/wordle/index.html'
