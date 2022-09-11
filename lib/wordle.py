@@ -1,13 +1,4 @@
-import cv2
-import numpy as np
-import discord
-from discord import Intents, Object, ButtonStyle
-from discord.ui import Button, View
-from discord.ext import commands
-from selenium import webdriver
-from selenium.webdriver.firefox.service import Service
-from pytesseract import image_to_string
-
+# base python modules
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from collections import Counter
@@ -17,16 +8,29 @@ from dataclasses import dataclass
 from sqlite3 import connect
 from random import choice
 from os import path, mkdir
-
-from requests import get
 from json import loads
 from re import search, findall
 from pickle import load, dump
 
+# pip modules
+import cv2
+import numpy as np
+import discord
+from discord import Intents, Object, ButtonStyle
+from discord.ui import Button, View
+from discord.ext import commands
+from selenium import webdriver
+from selenium.webdriver.firefox.service import Service
+from pytesseract import image_to_string
+from requests import get
 
 # import local modules
 from credentials import api_headers
 import ansi
+
+
+# objects needed to run bot
+__all__ = ['SubmissionEmbed', 'InvalidGame', 'WordleBot', 'DoubleSubmit', 'LinkView']
 
 
 def timer(func):

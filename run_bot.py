@@ -1,5 +1,5 @@
+#!./venv/bin/python3.10
 from lib import *
-
 
 def main() -> None:
     bot = WordleBot(server_id)
