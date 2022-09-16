@@ -1025,8 +1025,8 @@ class WordLookup:
         else: 
             return False
             
-
-    def _get_word_banks(self) -> Tuple[list, list]:
+    @staticmethod
+    def _get_word_banks() -> Tuple[list, list]:
         # get the webpage source as text from the website
         web_source_txt = get('https://www.nytimes.com/games/wordle/index.html').text
 
@@ -1046,16 +1046,16 @@ class WordLookup:
         # return the two lists
         return word_order, valid_words
 
-
-    def _get_wotd(self) -> str:
+    @staticmethod
+    def _get_wotd() -> str:
         # create a wotd_scraper object. This will get the wotd on creation
         scraper = WOTDScraper()
 
         # return the word of the day 
         return scraper._wotd
 
-
-    def _get_todays_date(self) -> datetime:
+    @staticmethod
+    def _get_todays_date() -> datetime:
         # return todays date as a datetime object
         return datetime.now().date()
 
@@ -1094,8 +1094,8 @@ class WordLookup:
         # return the mapped dictionary
         return d_to_w
 
-
-    def _map_word_to_date(self, d_to_w:dict) -> dict[str, datetime]:
+    @staticmethod
+    def _map_word_to_date(d_to_w:dict) -> dict[str, datetime]:
         # initialize new dictionary
         w_to_d = dict()
 
@@ -1107,7 +1107,7 @@ class WordLookup:
         # return dictionary
         return w_to_d
 
-
+    @staticmethod
     def _pkl_object(self, object:dict|list, file_prefix:str) -> None:
         # path for the pickled
         file_path = f'./lib/wordle_pickles/{file_prefix}.pkl'
@@ -1118,8 +1118,8 @@ class WordLookup:
             # write the pickled data to file_path
             dump(object, f)
 
-
-    def _load_object(self, file_prefix:str) -> dict|list:
+    @staticmethod
+    def _load_object(file_prefix:str) -> dict|list:
         # get the file path for the pickled data
         file_path = f'./lib/wordle_pickles/{file_prefix}.pkl'
         
