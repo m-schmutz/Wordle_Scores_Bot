@@ -19,7 +19,8 @@ if __name__ == '__main__':
         assert(len(argv) == 2)
     # if there arent the correct amount of command line arguments, print proper usage
     except:
-        usage()
+        print(f'Error: Must provide mode, use "help" for valid modes')
+        quit()
 
     # swtich case to find the mode the user wants to use
     match mode:
@@ -29,5 +30,7 @@ if __name__ == '__main__':
             remove()
         case 'remove-all':
             remove(all=True)
-        case _:
+        case 'help':
             usage()
+        case _:
+            print(f'Error: unrecognized mode "{mode}", use "help" for usage')
