@@ -330,39 +330,34 @@ class BotDatabase:
         # if the database did not previously exist, initialize the new one
         if not exists:
 
-            # initialize cursor
-            _cur = self._database.cursor()
+            with self._database.cursor() as _cur:
+                # execute sql script to initialize the sqlite database
+                _cur.executescript('''
 
-            # execute sql script to initialize the sqlite database
-            _cur.executescript('''
+                CREATE TABLE User_Data (
+                    username varchar, 
+                    games int, 
+                    wins int, 
+                    guesses int, 
+                    greens int, 
+                    yellows int, 
+                    uniques int, 
+                    guess_distro varchar, 
+                    last_win int, 
+                    last_submit int, 
+                    curr_streak int, 
+                    max_streak int, 
+                    PRIMARY KEY (username)
+                    ); 
 
-            CREATE TABLE User_Data (
-                username varchar, 
-                games int, 
-                wins int, 
-                guesses int, 
-                greens int, 
-                yellows int, 
-                uniques int, 
-                guess_distro varchar, 
-                last_win int, 
-                last_submit int, 
-                curr_streak int, 
-                max_streak int, 
-                PRIMARY KEY (username)
-                ); 
-
-            CREATE TABLE User_Stats (
-                username varchar,
-                win_rate float,
-                avg_guesses float,
-                green_rate float,
-                yellow_rate float,
-                FOREIGN KEY (username) REFERENCES User_Data(username)
-                );''')
-            
-            # close the cursor
-            _cur.close()
+                CREATE TABLE User_Stats (
+                    username varchar,
+                    win_rate float,
+                    avg_guesses float,
+                    green_rate float,
+                    yellow_rate float,
+                    FOREIGN KEY (username) REFERENCES User_Data(username)
+                    );''')
 
         # commit the changes to the database
         self._database.commit()
@@ -374,43 +369,40 @@ class BotDatabase:
     def _update_user(self, username:str, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> BaseStats:
 
         # initialize cursor
-        _cur = self._database.cursor()
+        with self._database.cursor() as _cur:
 
-        # get fields needed calculate updated stats for this user
-        _raw = _cur.execute(f'''
-            SELECT
-                games, wins, guesses, greens, yellows, uniques,
-                guess_distro, last_win, curr_streak, max_streak
-            FROM
-                User_Data
-            WHERE
-                username = '{username}';
-            ''').fetchone()
+            # get fields needed calculate updated stats for this user
+            _raw = _cur.execute(f'''
+                SELECT
+                    games, wins, guesses, greens, yellows, uniques,
+                    guess_distro, last_win, curr_streak, max_streak
+                FROM
+                    User_Data
+                WHERE
+                    username = '{username}';
+                ''').fetchone()
 
-        # create update values object. This will calculate all the updated stats
-        vals = UpdateValues(_raw, win, guesses, greens, yellows, uniques, date)
+            # create update values object. This will calculate all the updated stats
+            vals = UpdateValues(_raw, win, guesses, greens, yellows, uniques, date)
 
-        # execute sql script to update data in database for this user
-        _cur.executescript(f'''
-            UPDATE User_Data SET games = {vals._games_update} WHERE username = '{username}';
-            UPDATE User_Data SET wins = {vals._wins_update} WHERE username = '{username}';
-            UPDATE User_Data SET guesses = {vals._guesses_update} WHERE username = '{username}';
-            UPDATE User_Data SET greens = {vals._greens_update} WHERE username = '{username}';
-            UPDATE User_Data SET yellows = {vals._yellows_update} WHERE username = '{username}';
-            UPDATE User_Data SET uniques = {vals._uniques_update} WHERE username = '{username}';
-            UPDATE User_Data SET guess_distro = '{vals._distro_str_update}' WHERE username = '{username}';
-            UPDATE User_Data SET last_win = {vals._last_win_update} WHERE username = '{username}';
-            UPDATE User_Data SET curr_streak = {vals._streak_update} WHERE username = '{username}';
-            UPDATE User_Data SET max_streak = {vals._max_update} WHERE username = '{username}';
-            UPDATE User_Data SET last_submit = {date} WHERE username = '{username}';
+            # execute sql script to update data in database for this user
+            _cur.executescript(f'''
+                UPDATE User_Data SET games = {vals._games_update} WHERE username = '{username}';
+                UPDATE User_Data SET wins = {vals._wins_update} WHERE username = '{username}';
+                UPDATE User_Data SET guesses = {vals._guesses_update} WHERE username = '{username}';
+                UPDATE User_Data SET greens = {vals._greens_update} WHERE username = '{username}';
+                UPDATE User_Data SET yellows = {vals._yellows_update} WHERE username = '{username}';
+                UPDATE User_Data SET uniques = {vals._uniques_update} WHERE username = '{username}';
+                UPDATE User_Data SET guess_distro = '{vals._distro_str_update}' WHERE username = '{username}';
+                UPDATE User_Data SET last_win = {vals._last_win_update} WHERE username = '{username}';
+                UPDATE User_Data SET curr_streak = {vals._streak_update} WHERE username = '{username}';
+                UPDATE User_Data SET max_streak = {vals._max_update} WHERE username = '{username}';
+                UPDATE User_Data SET last_submit = {date} WHERE username = '{username}';
 
-            UPDATE User_Stats SET win_rate = {vals._win_rate_update} WHERE username = '{username}';
-            UPDATE User_Stats SET avg_guesses = {vals._avg_guesses_update} WHERE username = '{username}';
-            UPDATE User_Stats SET green_rate = {vals._green_rate_update} WHERE username = '{username}';
-            UPDATE User_Stats SET yellow_rate = {vals._yellow_rate_update} WHERE username = '{username}';''')
-
-        # close cursor
-        _cur.close()
+                UPDATE User_Stats SET win_rate = {vals._win_rate_update} WHERE username = '{username}';
+                UPDATE User_Stats SET avg_guesses = {vals._avg_guesses_update} WHERE username = '{username}';
+                UPDATE User_Stats SET green_rate = {vals._green_rate_update} WHERE username = '{username}';
+                UPDATE User_Stats SET yellow_rate = {vals._yellow_rate_update} WHERE username = '{username}';''')
 
         # commit changes to the database
         self._database.commit()
@@ -451,53 +443,49 @@ class BotDatabase:
         # get the yellow rate
         _yellow_rate = yellows / uniques
 
-        # initialize cursor
-        _cur = self._database.cursor()
+        with self._database.cursor() as _cur:
 
-        # execute sql script to add new user to the database
-        _cur.executescript(f'''
-            INSERT INTO User_Data (
-                username, 
-                games, 
-                wins, 
-                guesses, 
-                greens, 
-                yellows,
-                uniques, 
-                guess_distro,
-                last_win,
-                last_submit,
-                curr_streak, 
-                max_streak) 
-                Values (
-                    '{username}', 
-                    {_games_insert}, 
-                    {_wins_insert}, 
-                    {guesses}, 
-                    {greens}, 
-                    {yellows}, 
-                    {uniques},
-                    '{_distro_insert}',
-                    {_date_insert},
-                    {date},
-                    {_streak_insert}, 
-                    {_streak_insert});
+            # execute sql script to add new user to the database
+            _cur.executescript(f'''
+                INSERT INTO User_Data (
+                    username, 
+                    games, 
+                    wins, 
+                    guesses, 
+                    greens, 
+                    yellows,
+                    uniques, 
+                    guess_distro,
+                    last_win,
+                    last_submit,
+                    curr_streak, 
+                    max_streak) 
+                    Values (
+                        '{username}', 
+                        {_games_insert}, 
+                        {_wins_insert}, 
+                        {guesses}, 
+                        {greens}, 
+                        {yellows}, 
+                        {uniques},
+                        '{_distro_insert}',
+                        {_date_insert},
+                        {date},
+                        {_streak_insert}, 
+                        {_streak_insert});
 
-            INSERT INTO User_Stats (
-                username, 
-                win_rate, 
-                avg_guesses, 
-                green_rate, 
-                yellow_rate)
-                Values (
-                    '{username}', 
-                    {_win_rate}, 
-                    {_avg_guesses}, 
-                    {_green_rate}, 
-                    {_yellow_rate});''')
-
-        # close the cursor
-        _cur.close()
+                INSERT INTO User_Stats (
+                    username, 
+                    win_rate, 
+                    avg_guesses, 
+                    green_rate, 
+                    yellow_rate)
+                    Values (
+                        '{username}', 
+                        {_win_rate}, 
+                        {_avg_guesses}, 
+                        {_green_rate}, 
+                        {_yellow_rate});''')
 
         # commit the changes to the database
         self._database.commit()
@@ -513,15 +501,10 @@ class BotDatabase:
         # convert datetime object to int of form YYYYMMDD
         _date = int(dtime.strftime('%Y%m%d'))
 
-        # initialize cursor
-        _cur = self._database.cursor()
-
-        # get the raw result from the database query. _raw will be a tuple containing the last solve for the specified username if they are in 
-        # the database. _raw will be None if the username does not exist in the database
-        _raw = _cur.execute(f"SELECT last_submit from User_Data WHERE username = '{username}';").fetchone()
-
-        # close the cursor
-        _cur.close()
+        with self._database.cursor() as _cur:
+            # get the raw result from the database query. _raw will be a tuple containing the last solve for the specified username if they are in 
+            # the database. _raw will be None if the username does not exist in the database
+            _raw = _cur.execute(f"SELECT last_submit from User_Data WHERE username = '{username}';").fetchone()
 
         # user does exist in database
         if _raw:
@@ -545,22 +528,17 @@ class BotDatabase:
 
     def get_full_stats(self, username:str) -> FullStats:
         
-        # initialize cursor
-        _cur = self._database.cursor()
-
-        # get all data fields for the specified user
-        _raw = _cur.execute(f'''
-            SELECT
-                games, wins, guesses, greens, yellows, uniques, guess_distro, last_win,
-                curr_streak, max_streak, win_rate, avg_guesses, green_rate, yellow_rate
-            FROM
-                User_Data CROSS JOIN User_Stats
-            WHERE
-                User_Data.username = '{username}';
-            ''').fetchone()
-        
-        # close the cursor
-        _cur.close()
+        with self._database.cursor() as _cur:
+            # get all data fields for the specified user
+            _raw = _cur.execute(f'''
+                SELECT
+                    games, wins, guesses, greens, yellows, uniques, guess_distro, last_win,
+                    curr_streak, max_streak, win_rate, avg_guesses, green_rate, yellow_rate
+                FROM
+                    User_Data CROSS JOIN User_Stats
+                WHERE
+                    User_Data.username = '{username}';
+                ''').fetchone()
 
         # return FullStats object
         return FullStats(_raw)
