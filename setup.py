@@ -4,9 +4,9 @@ from lib import *
 
 def usage():
     print('Usage: python3.10 setup.py (install, remove or remove-all)')
-    print('install: Creates new virtual environment with necessary packages')
-    print('remove: Removes the virtual environment')
-    print('remove-all: Removes the virtual environment and installed apt packages')
+    print('\t1. install: Creates new virtual environment with necessary packages')
+    print('\t2. remove: Removes the virtual environment')
+    print('\t3. remove-all: Removes the virtual environment and installed apt packages')
     quit()
 
 

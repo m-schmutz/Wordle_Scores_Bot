@@ -1,9 +1,19 @@
 from subprocess import run, DEVNULL
 from ansi import green
+from os import getcwd, mkdir, path
 
 # objects to be imported
 __all__ = ['install', 'remove']
 
+# the name of the repository directory
+REPO = 'Wordle_Scores_Bot'
+
+# path for directory to hold the bot logs
+LOG_DIR = './lib/logs'
+
+# path for directory to hold the bot database
+DB_DIR = './lib/bot_database'
+ 
 # executable to run shell commands with
 BASH = '/bin/bash'
 
@@ -37,6 +47,19 @@ REQ_PIP = [
 
 
 def install() -> None:
+    # ensure that the present working directory is 'Wordle_Scores_bot'
+    try: 
+        assert(path.basename(getcwd()) == REPO)
+    except:
+        print(f'setup.py must be ran within the {REPO} directory')
+
+    # create needed directories
+    mkdir(LOG_DIR)
+    mkdir(DB_DIR)
+
+    # notify user of progress
+    print(green('lib subdirectories created'))
+
     # combine all apt commands needed
     apt_cmds = ';'.join(f'sudo apt-get install {pkg} -y' for pkg in REQ_APT) + ';sudo apt-get clean'
 
@@ -67,7 +90,6 @@ def install() -> None:
     # notify user that install is complete
     print(green('pip packages installed'))
     print(green('bot environment setup complete'))
-
 
 def remove(all=False) -> None:
     # remove the virtual environment
