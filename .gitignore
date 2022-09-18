@@ -2,14 +2,10 @@
 venv/
 lib/bot_database/
 lib/wordle_pickles/
+lib/logs
 *__pycache__
 
-*.log
 *.db
 
 lib/credentials.py
-lib/installs.txt
-lib/playground.py
-lib/wotd.txt
 test.py
-runningavg.py

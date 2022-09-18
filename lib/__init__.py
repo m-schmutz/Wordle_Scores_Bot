@@ -1,12 +1,13 @@
 # import path from sys
 from sys import path
 from __main__ import __file__
+from os.path import basename
 
 # add the lib directory so that python will search it for modules
 path.append('./lib')
 
 # check that this file is not being imported from the setup.py file
-if __file__[-8:] != 'setup.py':
+if basename(__file__) != 'setup.py':
     # import needed classes from wordle.py
     from random import randint
     from discord import Interaction, Attachment, app_commands

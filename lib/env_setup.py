@@ -1,12 +1,17 @@
-from subprocess import run, DEVNULL
+from subprocess import run
 from ansi import green
-from os import getcwd, mkdir, path
+from os import getcwd, mkdir
+from os.path import basename, exists
 
 # objects to be imported
 __all__ = ['install', 'remove']
 
 # the name of the repository directory
 REPO = 'Wordle_Scores_Bot'
+
+# log files for setup
+STDOUT_LOG = './lib/logs/setup.STDOUT'
+STDERR_LOG = './lib/logs/setup.STDERR'
 
 # path for directory to hold the bot logs
 LOG_DIR = './lib/logs'
@@ -49,13 +54,13 @@ REQ_PIP = [
 def install() -> None:
     # ensure that the present working directory is 'Wordle_Scores_bot'
     try: 
-        assert(path.basename(getcwd()) == REPO)
+        assert(basename(getcwd()) == REPO)
     except:
         print(f'setup.py must be ran within the {REPO} directory')
 
     # create needed directories
-    mkdir(LOG_DIR)
-    mkdir(DB_DIR)
+    if not exists(LOG_DIR): mkdir(LOG_DIR)
+    if not exists(DB_DIR): mkdir(DB_DIR)
 
     # notify user of progress
     print(green('lib subdirectories created'))
@@ -66,39 +71,51 @@ def install() -> None:
     # combine all pip commands needed
     pip_cmds = ACTIVATE_ENV+';'.join(f'pip3.10 install {pkg}' for pkg in REQ_PIP) + ';deactivate'
 
-    # update and upgrade packages
-    run(UPDATE_UPGRADE, stdin=0, stdout=DEVNULL, shell=True, executable=BASH)
 
-    # notify user of progress
-    print(green('update/upgrade complete'))
+    with open(STDOUT_LOG, 'w') as outlog, open(STDERR_LOG, 'w') as errlog:
 
-    # install apt packages
-    run(apt_cmds, stdout=DEVNULL, shell=True, executable=BASH)
+        # update and upgrade packages
+        run(UPDATE_UPGRADE, stdin=0, stdout=outlog, stderr=errlog, shell=True, executable=BASH)
 
-    # notify user of progress
-    print(green('apt packages installed'))
+        # notify user of progress
+        print(green('update/upgrade complete'))
 
-    # create the virtual environment
-    run(CREATE_ENV, stdout=DEVNULL, shell=True, executable=BASH)
+        # install apt packages
+        run(apt_cmds, stdout=outlog, stderr=errlog, shell=True, executable=BASH)
 
-    # notify user of progress
-    print(green('virtual environment created'))
+        # notify user of progress
+        print(green('apt packages installed'))
 
-    # install pip packages
-    run(pip_cmds, stdout=DEVNULL, shell=True, executable=BASH)
+        # create the virtual environment
+        run(CREATE_ENV, stdout=outlog, stderr=errlog, shell=True, executable=BASH)
+
+        # notify user of progress
+        print(green('virtual environment created'))
+
+        # install pip packages
+        run(pip_cmds, stdout=outlog, stderr=errlog, shell=True, executable=BASH)
 
     # notify user that install is complete
     print(green('pip packages installed'))
     print(green('bot environment setup complete'))
 
 def remove(all=False) -> None:
-    # remove the virtual environment
-    run(REMOVE_ENV, stdout=DEVNULL, shell=True, executable=BASH)
+    with open(STDOUT_LOG, 'w') as outlog, open(STDERR_LOG, 'w') as errlog:
+        # remove the virtual environment
+        run(REMOVE_ENV, stdout=STDOUT_LOG, stderr=STDERR_LOG, shell=True, executable=BASH)
 
-    # if user wants to remove all apt packages
-    if all:
-        # combine all apt commands to remove installed packages
-        apt_cmds = ';'.join(f'sudo apt-get remove {pkg} -y' for pkg in REQ_APT[2:]) + ';sudo apt-get clean'
+        # if user wants to remove all apt packages
+        if all:
+            # combine all apt commands to remove installed packages
+            apt_cmds = ';'.join(f'sudo apt-get remove {pkg} -y' for pkg in REQ_APT[2:]) + ';sudo apt-get clean'
 
-        # remove the installed commands
-        run(apt_cmds, stdout=DEVNULL, shell=True, executable=BASH)
+            # remove the installed commands
+            run(apt_cmds, stdout=outlog, stderr=errlog, shell=True, executable=BASH)
+
+            # notify user that remove-all completed
+            print(green('virtual environment and apt packages removed'))
+    
+            return
+
+        # notify user that remove completed
+        print(green('virtual environment removed'))        
