@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta
 from enum import Enum, auto
 from collections import Counter
+from types import TracebackType
 from typing import Tuple
 from time import perf_counter
 from dataclasses import dataclass
@@ -11,6 +12,8 @@ from os import path, mkdir
 from json import loads
 from re import search, findall
 from pickle import load, dump
+from atexit import register
+from traceback import format_tb
 
 # pip modules
 import cv2
@@ -30,7 +33,7 @@ import ansi
 
 
 # objects needed to run bot
-__all__ = ['SubmissionEmbed', 'InvalidGame', 'WordleBot', 'DoubleSubmit', 'LinkView']
+__all__ = ['SubmissionEmbed', 'InvalidGame', 'WordleBot', 'DoubleSubmit', 'LinkView', 'update_log', 'register']
 
 
 def timer(func):
@@ -41,6 +44,53 @@ def timer(func):
         print(ansi.magenta(f'[{end-beg:.06f}]: {func.__name__}'))
         return ret
     return _inner
+
+# log paths
+BOT_LOG = './lib/logs/bot.log'
+TB_LOG = './lib/logs/tracebacks.log'
+
+################################################################################################################################################
+# function to update log
+################################################################################################################################################
+def update_log(entry_type:str, user:str = None, exc_name:str = None, exc_tb:TracebackType = None) -> None:
+    # get the current time
+    current_time = datetime.now().astimezone().strftime('%m-%d-%Y %H:%M:%S')
+
+    # every log entry includes the time
+    base_entry = f'[{current_time}]'
+
+    # generate log entry depending on type
+    match entry_type:
+        case 'existing':
+            log_entry = f'{base_entry} Existing user: {user} submitted game\n'
+        case 'new':
+            log_entry = f'{base_entry} New user: {user} submitted game\n'
+        case 'dieroll':
+            log_entry = f'{base_entry} User: {user} rolled die\n'
+        case 'link':
+            log_entry = f'{base_entry} User: {user} requested link\n'
+        case 'startup':
+            log_entry = f'{base_entry} Bot Starting up\n'
+        case 'shutdown':
+            log_entry = f'{base_entry} Bot Shutting down\n'
+        case 'doublesub':
+            log_entry = f'{base_entry} User: {user} attempted double submit\n'
+        case 'invalid':
+            log_entry = f'{base_entry} User: {user} submitted invalid game\n'
+        case 'exception':
+            log_entry = f'{base_entry} Exception raised: {exc_name}\n'
+            
+            # get traceback information 
+            tb = f'[{current_time}]\n{"".join(format_tb(exc_tb))}\n\n'
+            
+            # write the traceback to the traceback log
+            with open(TB_LOG, 'a') as tbs:
+                tbs.write(tb)
+
+    # write entry to log
+    with open(BOT_LOG, 'a') as log:
+        log.write(log_entry)
+################################################################################################################################################
 
 
 ### Descriptor/Lightweight Classes
@@ -321,6 +371,10 @@ class BotDatabase:
         For example: BotDatabase('/path/to/database')
         If database file already exists, it will be used as the database
         '''
+
+        # make sure that database connection will be closed
+        register(self.close_connection)
+
         # determine if the file at db_path already exists
         exists = path.exists(db_path)
 
@@ -330,7 +384,7 @@ class BotDatabase:
         # if the database did not previously exist, initialize the new one
         if not exists:
 
-            with self._database.cursor() as _cur:
+            with self._database as _cur:
                 # execute sql script to initialize the sqlite database
                 _cur.executescript('''
 
@@ -359,17 +413,14 @@ class BotDatabase:
                     FOREIGN KEY (username) REFERENCES User_Data(username)
                     );''')
 
-        # commit the changes to the database
-        self._database.commit()
-
-    def __del__(self) -> None:
+    def close_connection(self) -> None:
         # close connection to database
         self._database.close()
 
     def _update_user(self, username:str, win:bool, guesses:int, greens:int, yellows:int, uniques:int, date:int) -> BaseStats:
 
         # initialize cursor
-        with self._database.cursor() as _cur:
+        with self._database as _cur:
 
             # get fields needed calculate updated stats for this user
             _raw = _cur.execute(f'''
@@ -403,9 +454,6 @@ class BotDatabase:
                 UPDATE User_Stats SET avg_guesses = {vals._avg_guesses_update} WHERE username = '{username}';
                 UPDATE User_Stats SET green_rate = {vals._green_rate_update} WHERE username = '{username}';
                 UPDATE User_Stats SET yellow_rate = {vals._yellow_rate_update} WHERE username = '{username}';''')
-
-        # commit changes to the database
-        self._database.commit()
 
         # return the stats object
         return BaseStats(vals._distro_str_update, vals._games_update, vals._win_rate_update, vals._streak_update, vals._max_update)
@@ -443,7 +491,7 @@ class BotDatabase:
         # get the yellow rate
         _yellow_rate = yellows / uniques
 
-        with self._database.cursor() as _cur:
+        with self._database as _cur:
 
             # execute sql script to add new user to the database
             _cur.executescript(f'''
@@ -487,9 +535,6 @@ class BotDatabase:
                         {_green_rate}, 
                         {_yellow_rate});''')
 
-        # commit the changes to the database
-        self._database.commit()
-
         # return the base_stats
         return BaseStats(_distro_insert, _games_insert, _win_rate, _streak_insert, _streak_insert)
 
@@ -501,7 +546,7 @@ class BotDatabase:
         # convert datetime object to int of form YYYYMMDD
         _date = int(dtime.strftime('%Y%m%d'))
 
-        with self._database.cursor() as _cur:
+        with self._database as _cur:
             # get the raw result from the database query. _raw will be a tuple containing the last solve for the specified username if they are in 
             # the database. _raw will be None if the username does not exist in the database
             _raw = _cur.execute(f"SELECT last_submit from User_Data WHERE username = '{username}';").fetchone()
@@ -519,16 +564,16 @@ class BotDatabase:
             
             # if we get to this point the user is submitting for the first time on day: _date
             # update stats
-            return self._update_user(username, win, guesses, greens, yellows, uniques, _date)
+            return self._update_user(username, win, guesses, greens, yellows, uniques, _date), 'existing'
 
         # user does not exist in database
         else:
             # add the user to the database
-            return self._add_user(username, win, guesses, greens, yellows, uniques, _date)
+            return self._add_user(username, win, guesses, greens, yellows, uniques, _date), 'new'
 
     def get_full_stats(self, username:str) -> FullStats:
         
-        with self._database.cursor() as _cur:
+        with self._database as _cur:
             # get all data fields for the specified user
             _raw = _cur.execute(f'''
                 SELECT
@@ -562,7 +607,10 @@ class WOTDScraper:
         self._last_updated = datetime.now().date()
         self._wotd = self._getWotd()
 
-    def __del__(self) -> None:
+        # ensure that scraper is closed to avoid memory leaks
+        register(self.close_scraper)
+
+    def close_scraper(self) -> None:
         # WILL CAUSE MEMORY LEAK IF NOT CLOSED
         self._driver.quit()
 
@@ -1086,7 +1134,7 @@ class WordLookup:
         return w_to_d
 
     @staticmethod
-    def _pkl_object(self, object:dict|list, file_prefix:str) -> None:
+    def _pkl_object(object:dict|list, file_prefix:str) -> None:
         # path for the pickled
         file_path = f'./lib/wordle_pickles/{file_prefix}.pkl'
         

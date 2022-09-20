@@ -1,5 +1,5 @@
 # import path from sys
-from sys import path
+from sys import path, exc_info
 from __main__ import __file__
 from os.path import basename
 
@@ -8,7 +8,7 @@ path.append('./lib')
 
 # check that this file is not being imported from the setup.py file
 if basename(__file__) != 'setup.py':
-    # import needed classes from wordle.py
+    # imports required to run bot
     from random import randint
     from discord import Interaction, Attachment, app_commands
     from wordle import *

@@ -14,12 +14,19 @@ def main() -> None:
         try:
             game = bot.scoreGame(await image.read(), date)
         except InvalidGame as e:
+            # update log about invalid game
+            update_log('invalid', user=str(interaction.user))
             return await interaction.response.send_message(content=e.message, ephemeral=True)
+
+        except:
+            exc_type, _, exc_traceback = exc_info()
+            update_log('exception', exc_name=exc_type.__name__, exc_tb=exc_traceback)
+            return
 
         # Submit scores to database. If the user has already submit
         # today, then reply with an error message and return.
         try:
-            baseStats = bot.db.submit_data(
+            baseStats, status = bot.db.submit_data(
                 username= str(interaction.user),
                 dtime= date,
                 win= game.won,
@@ -27,8 +34,19 @@ def main() -> None:
                 greens= game.uniqueCorrect,
                 yellows= game.uniqueMisplaced,
                 uniques= game.uniqueAll)
+
+            # update log
+            update_log(status, user=str(interaction.user))
+            
         except DoubleSubmit as e:
+            # update log about double submit
+            update_log('doublesub', user=str(interaction.user))
             return await interaction.response.send_message(content=e.message, ephemeral=True)
+
+        except:
+            exc_type, _, exc_traceback = exc_info()
+            update_log('exception', exc_name=exc_type.__name__, exc_tb=exc_traceback)
+            return
 
         # Reply to user's submission with stats.
         await interaction.response.send_message(
@@ -43,16 +61,38 @@ def main() -> None:
                 numGuesses= game.numGuesses),
             ephemeral= True)
 
+        
+
     @slash_cmd(description='Get the link to the Wordle webpage.', guild=bot.guild)
     async def link(interaction: Interaction) -> None:
-        await interaction.response.send_message(view= LinkView(), ephemeral= True)
+        try:
+            # update log about double submit
+            update_log('link', user=str(interaction.user))
+            await interaction.response.send_message(view= LinkView(), ephemeral= True)
+
+        except:
+            exc_type, _, exc_traceback = exc_info()
+            update_log('exception', exc_name=exc_type.__name__, exc_tb=exc_traceback)
+            return
 
     @slash_cmd(description='Roll an N-sided die!', guild=bot.guild)
     async def roll(interaction: Interaction, faces: app_commands.Range[int, 2, None]) -> None:
-        await interaction.response.send_message(f'You rolled a {randint(1, faces)}!')
+        try:
+            # update log about double submit
+            update_log('dieroll', user=str(interaction.user))
+            await interaction.response.send_message(f'You rolled a {randint(1, faces)}!')
 
+        except:
+            exc_type, _, exc_traceback = exc_info()
+            update_log('exception', exc_name=exc_type.__name__, exc_tb=exc_traceback)
+            return
+
+    update_log('startup')
     bot.run(bot_token)
 
+
+
 if __name__ == '__main__':
+    register(update_log, 'shutdown')
     main()
     
