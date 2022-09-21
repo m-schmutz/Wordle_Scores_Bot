@@ -10,32 +10,47 @@ TIME_RE = '[0-9]{2}-[0-9]{2}-[0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2}'
 
 class LogDebug:
     def __init__(self) -> None:
-        self.entries = None 
-       
+        self.entries = self.match_entries()
+  
+    @staticmethod
+    def parse_bot_log() -> list[str]:
+        with open(BOT_LOG, 'r') as log:
+            log_excs = findall(LOG_RE, log.read())
+        return log_excs
+
+    @staticmethod
+    def parse_tb_log() -> list[str]:
+        with open(TB_LOG, 'r') as log:
+            tbs = findall(TB_RE, log.read())
+        return tbs
+
+    def match_entries(self) -> dict[str, str]:
+        logs = self.parse_bot_log()
+        tbs = self.parse_tb_log()
+
+        # print(len(logs))
+        print(tbs)
+
+        entries = dict()
+
+        for log, tb in zip(logs, tbs):
+            log_time = search(TIME_RE, log).group()
+            tbs_time = search(TIME_RE, tb[0]).group()
+            assert(log_time == tbs_time)
+
+            entries[log_time] = (log[22:], tb[22:])
 
 
-def parse_bot_log() -> list[str]:
-    with open(BOT_LOG, 'r') as log:
-        log_excs = findall(LOG_RE, log)
-    return log_excs
-
-def parse_tb_log() -> list[str]:
-    with open(TB_LOG, 'a') as log:
-        tbs = findall(TB_RE, log)
-    return tbs
-
-def match_entries():
-    logs = parse_bot_log()
-    tbs = parse_tb_log()
-
-    for log, tb in zip(logs, tbs):
-        log_time = search(TIME_RE, log).group()
-        tbs_time = search(TIME_RE, tb).group()
-        assert(log_time == tbs_time)
+    def list_entries(self) -> None:
+        for time, logs in self.entries:
+            print(f'{time}: {logs[0]}')
+            print(logs[1])
 
 
 def main():
-    print(search(TIME_RE, '[09-20-2022 15:12:24] Bot Starting up').group())
+    logs = LogDebug()
+
+    logs.list_entries()
     
 
 
