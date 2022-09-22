@@ -11,6 +11,7 @@ __all__ = ['DoubleSubmit', 'BaseStats', 'FullStats', 'BotDatabase']
 # set DBLSUB_DISABLED to True if you want to ignore double submits
 DBLSUB_DISABLED = False
 
+DB_PATH = './lib/bot_database/stats.db'
 
 class DoubleSubmit(Exception):
     '''Exception raised if user attempts to submit twice on the same day'''
@@ -193,7 +194,7 @@ class BotDatabase:
     _database is a sqlite3 database connection where data is stored.
     '''
 
-    def __init__(self, db_path:str) -> None:
+    def __init__(self) -> None:
         '''
         BotDatabase(path:str) -> BotDatabase object with sqlite3 database stored at specified path
         For example: BotDatabase('/path/to/database')
@@ -204,10 +205,10 @@ class BotDatabase:
         register(self.close_connection)
 
         # determine if the file at db_path already exists
-        existing = exists(db_path)
+        existing = exists(DB_PATH)
 
         # initialize sqlite database at specified path
-        self._database = connect(db_path)
+        self._database = connect(DB_PATH)
 
         # if the database did not previously exist, initialize the new one
         if not existing:
