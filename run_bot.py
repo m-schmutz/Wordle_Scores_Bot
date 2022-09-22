@@ -15,12 +15,10 @@ def main() -> None:
             game = bot.scoreGame(await image.read(), date)
         except InvalidGame as e:
             # update log about invalid game
-            update_log('invalid', user=str(interaction.user))
             return await interaction.response.send_message(content=e.message, ephemeral=True)
 
         except:
             exc_type, _, exc_traceback = exc_info()
-            update_log('exception', exc_name=exc_type.__name__, exc_tb=exc_traceback)
             return
 
         # Submit scores to database. If the user has already submit
@@ -36,16 +34,14 @@ def main() -> None:
                 uniques= game.uniqueAll)
 
             # update log
-            update_log(status, user=str(interaction.user))
+           
             
         except DoubleSubmit as e:
             # update log about double submit
-            update_log('doublesub', user=str(interaction.user))
             return await interaction.response.send_message(content=e.message, ephemeral=True)
 
         except:
             exc_type, _, exc_traceback = exc_info()
-            update_log('exception', exc_name=exc_type.__name__, exc_tb=exc_traceback)
             return
 
         # Reply to user's submission with stats.
@@ -67,32 +63,25 @@ def main() -> None:
     async def link(interaction: Interaction) -> None:
         try:
             # update log about double submit
-            update_log('link', user=str(interaction.user))
             await interaction.response.send_message(view= LinkView(), ephemeral= True)
 
         except:
             exc_type, _, exc_traceback = exc_info()
-            update_log('exception', exc_name=exc_type.__name__, exc_tb=exc_traceback)
             return
 
     @slash_cmd(description='Roll an N-sided die!', guild=bot.guild)
     async def roll(interaction: Interaction, faces: app_commands.Range[int, 2, None]) -> None:
         try:
             # update log about double submit
-            update_log('dieroll', user=str(interaction.user))
             await interaction.response.send_message(f'You rolled a {randint(1, faces)}!')
 
         except:
             exc_type, _, exc_traceback = exc_info()
-            update_log('exception', exc_name=exc_type.__name__, exc_tb=exc_traceback)
             return
-
-    update_log('startup')
     bot.run(bot_token)
 
 
 
 if __name__ == '__main__':
-    register(update_log, 'shutdown')
     main()
     
