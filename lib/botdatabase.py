@@ -11,6 +11,7 @@ __all__ = ['DoubleSubmit', 'BaseStats', 'FullStats', 'BotDatabase']
 # set DBLSUB_DISABLED to True if you want to ignore double submits
 DBLSUB_DISABLED = False
 
+DB_PATH = './lib/bot_database/stats.db'
 
 class DoubleSubmit(Exception):
     '''Exception raised if user attempts to submit twice on the same day'''
@@ -28,7 +29,6 @@ class DoubleSubmit(Exception):
 @dataclass
 class BaseStats:
     """Default statistics to return upon a submission.
-
     ---
     - guesses distribution
     - \# games played
@@ -193,7 +193,7 @@ class BotDatabase:
     _database is a sqlite3 database connection where data is stored.
     '''
 
-    def __init__(self, db_path:str) -> None:
+    def __init__(self) -> None:
         '''
         BotDatabase(path:str) -> BotDatabase object with sqlite3 database stored at specified path
         For example: BotDatabase('/path/to/database')
@@ -204,10 +204,10 @@ class BotDatabase:
         register(self.close_connection)
 
         # determine if the file at db_path already exists
-        existing = exists(db_path)
+        existing = exists(DB_PATH)
 
         # initialize sqlite database at specified path
-        self._database = connect(db_path)
+        self._database = connect(DB_PATH)
 
         # if the database did not previously exist, initialize the new one
         if not existing:
@@ -215,7 +215,6 @@ class BotDatabase:
             with self._database as _cur:
                 # execute sql script to initialize the sqlite database
                 _cur.executescript('''
-
                 CREATE TABLE User_Data (
                     username varchar, 
                     games int, 
@@ -231,7 +230,6 @@ class BotDatabase:
                     max_streak int, 
                     PRIMARY KEY (username)
                     ); 
-
                 CREATE TABLE User_Stats (
                     username varchar,
                     win_rate float,
@@ -277,7 +275,6 @@ class BotDatabase:
                 UPDATE User_Data SET curr_streak = {vals._streak_update} WHERE username = '{username}';
                 UPDATE User_Data SET max_streak = {vals._max_update} WHERE username = '{username}';
                 UPDATE User_Data SET last_submit = {date} WHERE username = '{username}';
-
                 UPDATE User_Stats SET win_rate = {vals._win_rate_update} WHERE username = '{username}';
                 UPDATE User_Stats SET avg_guesses = {vals._avg_guesses_update} WHERE username = '{username}';
                 UPDATE User_Stats SET green_rate = {vals._green_rate_update} WHERE username = '{username}';
@@ -349,7 +346,6 @@ class BotDatabase:
                         {date},
                         {_streak_insert}, 
                         {_streak_insert});
-
                 INSERT INTO User_Stats (
                     username, 
                     win_rate, 
