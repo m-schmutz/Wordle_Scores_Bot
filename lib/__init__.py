@@ -11,7 +11,7 @@ if basename(__file__) != 'setup.py':
     # imports required to run bot
     from random import randint
     from discord import Interaction, Attachment, app_commands
-    from wordle import *
+    from wordlebot import *
     from credentials import bot_token, server_id
 
 # if it is, only import env_setup objects
