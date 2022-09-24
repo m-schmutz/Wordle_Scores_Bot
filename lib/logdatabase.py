@@ -8,6 +8,9 @@ from typing import Tuple
 
 LOG_DB_PATH = './lib/logs/log.db'
 
+LOG_EVENTS = {1: 'submit', 2: 'new', 3: 'doublesub', 4: 'invalid', 5: 'rolldie', 6: 'link', 7: 'exception', 8: 'su/sd'}
+
+
 '''
 log items: time, user, 
 '''
@@ -107,7 +110,10 @@ class LogReader:
     def logs_by_user(self, user:str) -> list:
         pass
 
-    def logs_by_event(self, event:str) -> list:
-        pass
+    def logs_by_event(self) -> list:
+        print('Events: ')
+        print('1: Game submissions\n2: New User added\n3: Double Submissions\n4: Invalid Games\n5: Die Rolls\n6: Link Requests\n7: Exceptions\n8: Startup/Shutdowns')
+
+
     def logs_by_timeframe(self) -> list:
         pass
