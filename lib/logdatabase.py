@@ -30,22 +30,64 @@ class NoLogs(Exception):
 class LogUpdate:
     def __init__(self) -> None:
         
+        # register method so that connection is closed on shutdown
         register(self.close_connection)
 
+        # check if database already exists
         existing = exists(LOG_DB_PATH)
 
+        # connect to database, if it doesn't exist, a new one is created
         self._log = connect(LOG_DB_PATH)
 
+        # only create tables if the database does not exist
         if not existing:
             with self._log as _cur:
-                pass
+                _cur.executescript('''
+                CREATE TABLE BotLog (
+                    event_time int,
+                    user str, 
+                    event str, 
+                    msg str);
+
+                CREATE TABLE Tracebacks (
+                    event_time int,
+                    tb str);
+                ''')
 
     def close_connection(self) -> None:
         # close connection to database
         self._log.close()
 
-    def update(self) -> None:
-        pass
+    def update(self, dtime:datetime, user:str, event:str, msg:str, tb:str=None) -> None:
+        
+        # convert datetime to int
+        event_time = dtime_to_dint(dtime)
+
+        # 
+        with self._log as _cur:
+            _cur.execute(f'''
+            INSERT INTO BotLog (
+                event_time, 
+                user, 
+                event, 
+                msg)
+                Values (
+                    {event_time},
+                    '{user}', 
+                    '{event}', 
+                    '{msg}')''')
+
+            if tb:
+                _cur.execute(f'''
+                INSERT INTO Tracebacks (
+                    event_time, 
+                    tb)
+                    Values (
+                        {event_time},
+                        '{tb}')''')
+
+
+
 
 
 class LogReader:
@@ -61,3 +103,11 @@ class LogReader:
     def close_connection(self) -> None:
         # close connection to database
         self._log.close()
+
+    def logs_by_user(self, user:str) -> list:
+        pass
+
+    def logs_by_event(self, event:str) -> list:
+        pass
+    def logs_by_timeframe(self) -> list:
+        pass
