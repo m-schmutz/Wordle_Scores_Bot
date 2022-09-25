@@ -104,7 +104,7 @@ def install() -> None:
 def remove(all=False) -> None:
     with open(STDOUT_LOG, 'w') as outlog, open(STDERR_LOG, 'w') as errlog:
         # remove the virtual environment
-        run(REMOVE_ENV, stdout=STDOUT_LOG, stderr=STDERR_LOG, shell=True, executable=BASH)
+        run(REMOVE_ENV, stdout=outlog, stderr=errlog, shell=True, executable=BASH)
 
         # if user wants to remove all apt packages
         if all:
