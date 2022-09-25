@@ -215,17 +215,21 @@ class LogReader:
                 manage_output(entries)
                 # clear screen 
                 print('\033[2J\033[H',end='')
-            
+        
+        # exit when CTRL-C is received
         except KeyboardInterrupt:
             return
 
 
     def logs_by_event(self) -> None:
+        # loop until we receive CTRL-C
         try: 
             while True:
+                # loop until we get valid input
                 while True:
                     print('Pick an event to view: ')
                     print('1: Game submissions\n2: New User added\n3: Double Submissions\n4: Invalid Games\n5: Die Rolls\n6: Link Requests\n7: Exceptions\n8: Startup/Shutdowns')
+                    # get user input, break if it is valid
                     try:
                         event_ind = input('> ')
                         event_ind = int(event_ind)
@@ -235,11 +239,15 @@ class LogReader:
                         print('\033[2J\033[H',end='')
                         print(f'Invalid input: {event_ind}')
                 
+                # get entries of event
                 entries = self._get_by_event(event)
+                # send output to be printed or saved to file
                 manage_output(entries)
+                
                 # clear screen 
                 print('\033[2J\033[H',end='')
-                       
+
+        # exit when CTRL-C is received   
         except KeyboardInterrupt:
             return
 
@@ -249,12 +257,14 @@ class LogReader:
 
 
     def exception_logs(self, last:int = None) -> None:
-
+        # get all exceptions
         excs = self._get_exc_info()
 
+        # loop until we have valid user input
         while True:
             print('Enter the amount of latest tracebacks you want')
             print('Leave blank to get all tracebacks')
+            # get user input, break if input is valid
             try:
                 last = input('> ')
                 if len(str(last)) == 0:
@@ -266,12 +276,12 @@ class LogReader:
                 print('\033[2J\033[H',end='')
                 print(f'Invalid input: {last}')
         
+        # slice list of exceptions if requested by user
         if last:
-            print('slice')
             excs = excs[-last:]
 
+        # send output to be printed or saved to file
         manage_output(excs)
-
         return
 
 
@@ -282,36 +292,42 @@ class LogReader:
 
 
     def _all_logs(self) -> list:
+        # get all entries from the database
         with self._log as _cur:
             entries = _cur.execute('SELECT * FROM BotLog').fetchall()
         
+        # return list of each entry as a string
         return list(map(format_entry, entries))
 
 
     def _get_by_event(self, event:str) -> list:
+        # get all entries that are of the passed event 
         with self._log as _cur:
             entries = _cur.execute(f"SELECT * FROM BotLog WHERE event = '{event}'").fetchall()
-
+        # return as a list of strings
         return list(map(format_entry, entries))
 
 
     def _get_exc_info(self) -> list:
+        # get all entries which are exceptions and also grab their respective tracebacks
         with self._log as _cur:
             excs_tbs = _cur.execute("SELECT * FROM BotLog LEFT JOIN Tracebacks ON BotLog.event_time = Tracebacks.event_time WHERE event = 'exception'").fetchall()
 
-            return list(map(format_excs, excs_tbs))
+        # return as a list of strings
+        return list(map(format_excs, excs_tbs))
 
 
     def _get_by_user(self, user:str) -> list:
-
+        # get all entries that are of the passed user
         with self._log as _cur:
             entries = _cur.execute(f"SELECT * FROM BotLog WHERE user = '{user}'").fetchall()
-        
+        # return as a list of strings
         return list(map(format_entry, entries))
 
 
     def _get_unique_users(self) -> list:
+        # get all unique users from the BotLog table
         with self._log as _cur:
             users = _cur.execute('SELECT DISTINCT user from BotLog').fetchall()
-        
+        # return as a list of each username
         return [(i, user[0]) for i, user in enumerate(users)]

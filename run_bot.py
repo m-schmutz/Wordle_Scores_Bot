@@ -34,7 +34,9 @@ async def _submit(bot:WordleBot, image:Attachment, interaction: Interaction) -> 
             numGuesses= game.numGuesses),
         ephemeral= True)
 
+    # return the event (submit, new)
     return event
+
 
 def main() -> None:
 
