@@ -389,7 +389,7 @@ class BotDatabase:
             
             # if we get to this point the user is submitting for the first time on day: _date
             # update stats
-            return self._update_user(username, win, guesses, greens, yellows, uniques, _date), 'existing'
+            return self._update_user(username, win, guesses, greens, yellows, uniques, _date), 'submit'
 
         # user does not exist in database
         else:

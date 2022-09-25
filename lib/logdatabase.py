@@ -2,7 +2,7 @@ from sqlite3 import connect
 from os.path import exists
 from datetime import datetime
 from atexit import register
-from traceback import TracebackException, format_tb
+from traceback import format_tb
 from types import TracebackType
 
 
@@ -28,7 +28,7 @@ class LogUpdate:
     def __init__(self) -> None:
         
         # register method so that connection is closed on shutdown
-        register(self.close_connection)
+        register(self.log_shutdown)
 
         # check if database already exists
         existing = exists(LOG_DB_PATH)
@@ -52,18 +52,21 @@ class LogUpdate:
                 ''')
 
     def log_shutdown(self) -> None:
+        # update log on bot shutdown
+        self.update(datetime.now(), 'WordleBot', 'su/sd', 'WordleBot Shutting down')
+
         # close connection to database
         self._log.close()
 
-    def update(self, dtime:datetime, user:str, event:str, msg:str, traceback:TracebackType=None) -> None:
-        
 
+    def update(self, dtime:datetime, user:str, event:str, msg:str, traceback:TracebackType=None) -> None:
+        # format the traceback information as a string
         tb = "".join(format_tb(traceback))
 
         # convert datetime to int
         event_time = dtime_to_dint(dtime)
 
-        # 
+        # insert new entry into the BotLog table
         with self._log as _cur:
             _cur.execute(f'''
             INSERT INTO BotLog (
@@ -76,7 +79,8 @@ class LogUpdate:
                     '{user}', 
                     '{event}', 
                     '{msg}')''')
-
+            
+            # if a traceback is given then log the traceback as well
             if tb:
                 _cur.execute(f'''
                 INSERT INTO Tracebacks (
