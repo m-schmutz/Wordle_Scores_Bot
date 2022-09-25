@@ -11,6 +11,7 @@ __all__ = ['DoubleSubmit', 'BaseStats', 'FullStats', 'BotDatabase']
 # set DBLSUB_DISABLED to True if you want to ignore double submits
 DBLSUB_DISABLED = False
 
+# path to the database
 DB_PATH = './lib/bot_database/stats.db'
 
 class DoubleSubmit(Exception):

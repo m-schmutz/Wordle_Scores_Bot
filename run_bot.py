@@ -11,7 +11,7 @@ async def _submit(bot:WordleBot, image:Attachment, interaction: Interaction) -> 
 
     # Submit scores to database. If the user has already submit
     # today, then reply with an error message and return.
-    baseStats, status = bot.db.submit_data(
+    baseStats, event = bot.db.submit_data(
         username= str(interaction.user),
         dtime= date,
         win= game.won,
@@ -34,46 +34,66 @@ async def _submit(bot:WordleBot, image:Attachment, interaction: Interaction) -> 
             numGuesses= game.numGuesses),
         ephemeral= True)
 
-    return
-
-
-
-
-
-
-
+    return event
 
 def main() -> None:
+
+    # initialize WordleBot
     bot = WordleBot(server_id)
     slash_cmd = bot.tree.command
 
+    # initialize log
+    log = LogUpdate()
+
+    # command to submit a game
     @slash_cmd(description='Submit a screenshot of your Wordle game!', guild=bot.guild)
     async def submit(interaction: Interaction, image: Attachment) -> None:
-        try:
-            _submit(bot, image, interaction)
 
+        user = str(interaction.user)
+        dtime = datetime.now()
+        # try to submit game
+        try:
+            # update the database and return the event type
+            event = _submit(bot, image, interaction)
+            dtime
+            # check if the user is new
+            if event == 'new':
+                log.update(dtime, user, event, f'{user} added as new user')
+
+            # log submitted game
+            log.update(dtime, user, event, f'{user} submitted game')
+
+        # log InvalidGame
         except InvalidGame as e:
             # update log about invalid game
+            log.update(dtime, user, 'invalid', f'{user} submitted invalid game')
             return await interaction.response.send_message(content=e.message, ephemeral=True)
 
+        # log DoubleSubmit
         except DoubleSubmit as e:
             # update log about double submit
+            # log submitted game
+            log.update(dtime, user, 'doublesub', f'{user} attempted double submit')
             return await interaction.response.send_message(content=e.message, ephemeral=True)
 
+        # log un-handled exception
         except:
             exc_type, _, exc_traceback = exc_info()
+            log.update(dtime, user, 'exception', f'{exc_type.__name__} raised', traceback=exc_traceback)
 
         
-
+    # command to get wordle link
     @slash_cmd(description='Get the link to the Wordle webpage.', guild=bot.guild)
     async def link(interaction: Interaction) -> None:
+        # try to print link
         try:
             # update log about double submit
             await interaction.response.send_message(view= LinkView(), ephemeral= True)
 
+        # log un-handled exception
         except:
-            
-            return
+            exc_type, _, exc_traceback = exc_info()
+            log.update(datetime.now(), str(interaction.user), 'exception', f'{exc_type.__name__} raised', traceback=exc_traceback)
 
     @slash_cmd(description='Roll an N-sided die!', guild=bot.guild)
     async def roll(interaction: Interaction, faces: app_commands.Range[int, 2, None]) -> None:
@@ -83,7 +103,9 @@ def main() -> None:
 
         except:
             exc_type, _, exc_traceback = exc_info()
-            return
+            log.update(datetime.now(), str(interaction.user), 'exception', f'{exc_type.__name__} raised', traceback=exc_traceback)
+
+
     bot.run(bot_token)
 
 

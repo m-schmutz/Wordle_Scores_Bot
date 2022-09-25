@@ -13,6 +13,7 @@ if basename(__file__) != 'setup.py':
     from discord import Interaction, Attachment, app_commands
     from wordlebot import *
     from credentials import bot_token, server_id
+    from logdatabase import LogUpdate
 
 # if it is, only import env_setup objects
 else:

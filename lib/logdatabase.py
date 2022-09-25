@@ -1,20 +1,14 @@
 from sqlite3 import connect
 from os.path import exists
 from datetime import datetime
-from dataclasses import dataclass
 from atexit import register
-from typing import Tuple
+from traceback import TracebackException, format_tb
+from types import TracebackType
 
 
 LOG_DB_PATH = './lib/logs/log.db'
 
 LOG_EVENTS = {1: 'submit', 2: 'new', 3: 'doublesub', 4: 'invalid', 5: 'rolldie', 6: 'link', 7: 'exception', 8: 'su/sd'}
-
-
-'''
-log items: time, user, 
-'''
-#tb = f'[{current_time}]\n{"".join(format_tb(exc_tb))}\n\n'
 
 
 def dtime_to_dint(dtime:datetime) -> int:
@@ -57,12 +51,15 @@ class LogUpdate:
                     tb str);
                 ''')
 
-    def close_connection(self) -> None:
+    def log_shutdown(self) -> None:
         # close connection to database
         self._log.close()
 
-    def update(self, dtime:datetime, user:str, event:str, msg:str, tb:str=None) -> None:
+    def update(self, dtime:datetime, user:str, event:str, msg:str, traceback:TracebackType=None) -> None:
         
+
+        tb = "".join(format_tb(traceback))
+
         # convert datetime to int
         event_time = dtime_to_dint(dtime)
 
