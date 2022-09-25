@@ -31,14 +31,19 @@ def format_excs(entry) -> str:
     time, user, event, msg, time, tb = entry
     return f'[{dint_to_str(time)}] -> {user}, {event}: {msg}\n{tb}\n'
 
+# function to save output to file or print to string
 def manage_output(entries:list) -> None:
+    # print prompt
     print('Enter file name to store log entries')
     print('Leave blank to print entries to screen')
     file = str(input('> '))
 
+    # check if user entered a name
     if len(file) != 0:
         with open(file, 'w') as f:
             f.writelines(entries)
+
+    # otherwise print the output to screen
     else:
         for entry in entries:
             print(entry)
@@ -176,19 +181,23 @@ class LogReader:
             print()
             exit()
 
-
+    # gets all log entries
     def all_logs(self) -> None:
+        # get all logs entries
         logs = self._all_logs()
+        # manage output
         manage_output(logs)
 
     # read logs by user
     def logs_by_user(self) -> None:
-        
+        # get all the users in the database
         users = self._get_unique_users()
         registry = {i+1: user for i, user in users}
 
+        # loop until user uses CTRL-C
         try:
             while True:
+                # loop until user gives valid input
                 while True:
                     print('Pick a user: ')
                     for i, user in registry.items():
@@ -267,7 +276,6 @@ class LogReader:
 
 
         
-
     def _close_connection(self) -> None:
         # close connection to database
         self._log.close()
