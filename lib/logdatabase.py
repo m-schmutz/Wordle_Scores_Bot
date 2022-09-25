@@ -61,7 +61,7 @@ class LogUpdate:
     def log_shutdown(self) -> None:
         # update log on bot shutdown
         self.update(datetime.now(), 'WordleBot', 'su/sd', 'WordleBot Shutting down')
-
+        
         # close connection to database
         self._log.close()
 
@@ -86,7 +86,7 @@ class LogUpdate:
                     '{user}', 
                     '{event}', 
                     '{msg}')''')
-            
+
             # if a traceback is given then log the traceback as well
             if tb:
                 _cur.execute(f'''
@@ -103,7 +103,7 @@ class LogReader:
         # check that a log exists
         if not exists(LOG_DB_PATH):
             raise NoLogs
-        
+
         # ensure that the database connection is closed on exit
         register(self._close_connection)
 
