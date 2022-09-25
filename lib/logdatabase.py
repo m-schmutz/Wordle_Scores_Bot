@@ -4,6 +4,7 @@ from datetime import datetime
 from atexit import register
 from traceback import format_tb
 from types import TracebackType
+from sys import exit
 
 # log path
 LOG_DB_PATH = './lib/logs/log.db'
@@ -23,7 +24,13 @@ def dint_to_str(dint:int) -> str:
 # format a log entry into a string
 def format_entry(entry) -> str:
     time, user, event, msg = entry
-    return f'[{dint_to_str(time)}] {user}, {event}: {msg}'
+    return f'[{dint_to_str(time)}] -> {user}, {event}: {msg}'
+
+# format exception log entries with respective tracebacks
+def format_excs(entry) -> str:
+    time, user, event, msg, time, tb = entry
+    return f'[{dint_to_str(time)}] -> {user}, {event}: {msg}\n{tb}'
+
 
 # exception raised if there is no log present
 class NoLogs(Exception):
@@ -110,56 +117,137 @@ class LogReader:
         # connect to the log database
         self._log = connect(LOG_DB_PATH)
 
-    # read logs by user
-    def logs_by_user(self, file:str=None) -> list:
-        users = self._get_unique_users()
-        registry = dict()
-
-        print('Pick a user: ')
-
-        for i, user in users:
-            registry[i] = user
-            print(f'{i}: {user}')
-
-        try: 
-            user_ind = int(input('> '))
-            user = registry[user_ind]
-        except:
-            print('Invalid input')
-            return
-
-        entries = self._get_by_user(user)
-
-        print(entries)
-
-    def logs_by_event(self, file:str=None) -> list:
-        print('Pick an event to view: ')
-        print('1: Game submissions\n2: New User added\n3: Double Submissions\n4: Invalid Games\n5: Die Rolls\n6: Link Requests\n7: Exceptions\n8: Startup/Shutdowns')
+    # Provides interface for looking up and storing logs
+    def interface(self) -> None:
+        # this is used to catch keyboard interupts to end program
         try:
-            event = int(input('> '))
-        except:
-            print('Invalid input')
+            # while the user is still using the program
+            while True:
+                # while the user has not given valid input
+                while True:
+                    # prompt
+                    print('Select Search Type: ')
+                    print('1: By User\n2: By Event\n3: By Timeframe\n4: Exception/Tracebacks\n5: All Logs')
+                    # get user input
+                    try: 
+                        stype = input('> ')
+                        # check that input is valid
+                        stype = int(stype)
+                        assert(stype >= 1 and stype <= 4)
+                        # break out of loop if no exceptions are raised
+                        break
+                    except (ValueError, AssertionError):
+                        # clear screen and print error message
+                        print('\033[2J\033[H',end='')
+                        print(f'Invalid input: {stype}')
+                
+                # send user to correct search
+                match stype:
+                    case 1:
+                        self.logs_by_user()
+                    case 2: 
+                        self.logs_by_event()
+                    case 3:
+                        self.logs_by_timeframe()
+                    case 4:
+                        self.exception_logs()
+                    case 5:
+                        self._all_logs()
+                
+                # clear screen 
+                print('\033[2J\033[H',end='')
+
+        # if keyboard interupt is given, end program
+        except KeyboardInterrupt:
+            exit()
+
+
+    def all_logs(self) -> None:
+        logs = self._all_logs()
+
+    # read logs by user
+    def logs_by_user(self) -> None:
+        
+        users = self._get_unique_users()
+        registry = {i+1: user for i, user in users}
+
+        try:
+            while True:
+                while True:
+                    print('Pick a user: ')
+                    for i, user in registry.items():
+                        print(f'{i}: {user}')
+                    try:
+                        user_ind = input('> ')
+                        user_ind = int(user_ind)
+                        user = registry[user_ind]
+                        break
+                    except (ValueError, KeyError):
+                        print('\033[2J\033[H',end='')
+                        print(f'Invalid input: {user_ind}')
+                
+                entries = self._get_by_user(user)
+            
+        except KeyboardInterrupt:
             return
 
-        entries = self._get_by_event(LOG_EVENTS[event])
+    def logs_by_event(self) -> None:
+        try: 
+            while True:
+                while True:
+                    print('Pick an event to view: ')
+                    print('1: Game submissions\n2: New User added\n3: Double Submissions\n4: Invalid Games\n5: Die Rolls\n6: Link Requests\n7: Exceptions\n8: Startup/Shutdowns')
+                    try:
+                        event_ind = input('> ')
+                        event_ind = int(event_ind)
+                        event = LOG_EVENTS[event_ind]
+                        break
+                    except (ValueError, KeyError):
+                        print('\033[2J\033[H',end='')
+                        print(f'Invalid input: {event_ind}')
+                
+                entries = self._get_by_event(event)
+                       
+        except KeyboardInterrupt:
+            return
 
-        print(entries)
+    def logs_by_timeframe(self) -> None:
+        print('NOT IMPLEMENTED YET')
 
-    def logs_by_timeframe(self) -> list:
-        pass
+    def exception_logs(self, last:int = None) -> None:
+        excs = self._get_exc_info()
+
+
+        if last:
+            excs = excs[-last:]
+
+
+        for entry in excs:
+            print('#########################################################################################')
+            print(entry)
+            print('#########################################################################################')
 
     def _close_connection(self) -> None:
         # close connection to database
         self._log.close()
 
-    def _get_by_event(self, event:str) -> list:
+    def _all_logs(self) -> list:
+        with self._log as _cur:
+            entries = _cur.execute('SELECT * FROM BotLog').fetchall()
+        
+        return list(map(format_entry, entries))
 
+    def _get_by_event(self, event:str) -> list:
         with self._log as _cur:
             entries = _cur.execute(f"SELECT * FROM BotLog WHERE event = '{event}'").fetchall()
-        
-        formatted = list(map(format_entry, entries))
 
-        return formatted
+        return list(map(format_entry, entries))
+
+    def _get_exc_info(self) -> list:
+        with self._log as _cur:
+            excs_tbs = _cur.execute("SELECT * FROM BotLog LEFT JOIN Tracebacks ON BotLog.event_time = Tracebacks.event_time WHERE event = 'exception'").fetchall()
+
+            return list(map(format_excs, excs_tbs))
 
     def _get_by_user(self, user:str) -> list:
 
@@ -174,6 +262,4 @@ class LogReader:
         with self._log as _cur:
             users = _cur.execute('SELECT DISTINCT user from BotLog').fetchall()
         
-        formatted = [(i, user[0]) for i, user in enumerate(users)]
-
-        return formatted
+        return [(i, user[0]) for i, user in enumerate(users)]
