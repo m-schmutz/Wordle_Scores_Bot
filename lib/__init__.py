@@ -6,14 +6,17 @@ from os.path import basename
 # add the lib directory so that python will search it for modules
 path.append('./lib')
 
-# check that this file is not being imported from the setup.py file
-if basename(__file__) != 'setup.py':
-    # imports required to run bot
-    from random import randint
-    from discord import Interaction, Attachment, app_commands
-    from wordlebot import *
-    from credentials import bot_token, server_id
+match basename(__file__):
+    case 'run_bot.py':
+        # imports required to run bot
+        from random import randint
+        from discord import Interaction, Attachment, app_commands
+        from wordlebot import *
+        from credentials import bot_token, server_id
+        from logdatabase import LogUpdate
 
-# if it is, only import env_setup objects
-else:
-    from env_setup import *
+    case 'setup.py':
+        from env_setup import *
+
+    case 'read_logs.py':
+        from logdatabase import LogReader

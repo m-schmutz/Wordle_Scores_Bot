@@ -11,6 +11,7 @@ __all__ = ['DoubleSubmit', 'BaseStats', 'FullStats', 'BotDatabase']
 # set DBLSUB_DISABLED to True if you want to ignore double submits
 DBLSUB_DISABLED = False
 
+# path to the database
 DB_PATH = './lib/bot_database/stats.db'
 
 class DoubleSubmit(Exception):
@@ -29,7 +30,6 @@ class DoubleSubmit(Exception):
 @dataclass
 class BaseStats:
     """Default statistics to return upon a submission.
-
     ---
     - guesses distribution
     - \# games played
@@ -216,7 +216,6 @@ class BotDatabase:
             with self._database as _cur:
                 # execute sql script to initialize the sqlite database
                 _cur.executescript('''
-
                 CREATE TABLE User_Data (
                     username varchar, 
                     games int, 
@@ -232,7 +231,6 @@ class BotDatabase:
                     max_streak int, 
                     PRIMARY KEY (username)
                     ); 
-
                 CREATE TABLE User_Stats (
                     username varchar,
                     win_rate float,
@@ -278,7 +276,6 @@ class BotDatabase:
                 UPDATE User_Data SET curr_streak = {vals._streak_update} WHERE username = '{username}';
                 UPDATE User_Data SET max_streak = {vals._max_update} WHERE username = '{username}';
                 UPDATE User_Data SET last_submit = {date} WHERE username = '{username}';
-
                 UPDATE User_Stats SET win_rate = {vals._win_rate_update} WHERE username = '{username}';
                 UPDATE User_Stats SET avg_guesses = {vals._avg_guesses_update} WHERE username = '{username}';
                 UPDATE User_Stats SET green_rate = {vals._green_rate_update} WHERE username = '{username}';
@@ -350,7 +347,6 @@ class BotDatabase:
                         {date},
                         {_streak_insert}, 
                         {_streak_insert});
-
                 INSERT INTO User_Stats (
                     username, 
                     win_rate, 
@@ -393,7 +389,7 @@ class BotDatabase:
             
             # if we get to this point the user is submitting for the first time on day: _date
             # update stats
-            return self._update_user(username, win, guesses, greens, yellows, uniques, _date), 'existing'
+            return self._update_user(username, win, guesses, greens, yellows, uniques, _date), 'submit'
 
         # user does not exist in database
         else:

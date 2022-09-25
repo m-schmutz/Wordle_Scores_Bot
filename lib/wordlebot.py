@@ -18,7 +18,7 @@ from pytesseract import image_to_string
 # import local modules
 import ansi
 from botdatabase import *
-from scraper import WOTDScraper
+from wotd import WOTD
 from wordlookup import WordLookup
 from wordinfo import WordInfo
 
@@ -127,7 +127,7 @@ class WordleBot(commands.Bot):
         self._lightThresh = 0xeb # midpoint between the BG and the next brightest color
         self.synced = False
         self.guild = Object(id=server_id)
-        self.scraper = WOTDScraper()
+        self.scraper = WOTD()
         self.db = BotDatabase()
 
     def _guessesFromImage(self, image: bytes) -> np.ndarray:

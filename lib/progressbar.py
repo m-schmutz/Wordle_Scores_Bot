@@ -1,4 +1,4 @@
-import lib.ansi as ansi
+import ansi
 
 class ProgressBar:
     def __init__(self, total:float=100, width:int=64, fill_char:str='#', empty_char:str='-', left:str='[',

@@ -18,6 +18,9 @@ LOG_DIR = './lib/logs'
 
 # path for directory to hold the bot database
 DB_DIR = './lib/bot_database'
+
+# directory to hold pickle files
+PICKLES_DIR = './lib/wordle_pickles'
  
 # executable to run shell commands with
 BASH = '/bin/bash'
@@ -36,7 +39,6 @@ REMOVE_ENV = 'rm -rf venv/'
 
 # required apt packages
 REQ_APT = [
-    'firefox-geckodriver',
     'python3.10-venv',
     'tesseract-ocr' ]
 
@@ -47,7 +49,6 @@ REQ_PIP = [
     'psutil',
     'pytesseract',
     'requests',
-    'selenium',
     '--upgrade git+https://github.com/Rapptz/discord.py' ]
 
 
@@ -61,6 +62,7 @@ def install() -> None:
     # create needed directories
     if not exists(LOG_DIR): mkdir(LOG_DIR)
     if not exists(DB_DIR): mkdir(DB_DIR)
+    if not exists(PICKLES_DIR): mkdir(PICKLES_DIR)
 
     # notify user of progress
     print(green('lib subdirectories created'))
@@ -102,7 +104,7 @@ def install() -> None:
 def remove(all=False) -> None:
     with open(STDOUT_LOG, 'w') as outlog, open(STDERR_LOG, 'w') as errlog:
         # remove the virtual environment
-        run(REMOVE_ENV, stdout=STDOUT_LOG, stderr=STDERR_LOG, shell=True, executable=BASH)
+        run(REMOVE_ENV, stdout=outlog, stderr=errlog, shell=True, executable=BASH)
 
         # if user wants to remove all apt packages
         if all:
