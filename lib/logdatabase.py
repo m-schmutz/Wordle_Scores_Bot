@@ -24,13 +24,27 @@ def dint_to_str(dint:int) -> str:
 # format a log entry into a string
 def format_entry(entry) -> str:
     time, user, event, msg = entry
-    return f'[{dint_to_str(time)}] -> {user}, {event}: {msg}'
+    return f'[{dint_to_str(time)}] -> {user}, {event}: {msg}\n'
 
 # format exception log entries with respective tracebacks
 def format_excs(entry) -> str:
     time, user, event, msg, time, tb = entry
-    return f'[{dint_to_str(time)}] -> {user}, {event}: {msg}\n{tb}'
+    return f'[{dint_to_str(time)}] -> {user}, {event}: {msg}\n{tb}\n'
 
+def manage_output(entries:list) -> None:
+    print('Enter file name to store log entries')
+    print('Leave blank to print entries to screen')
+    file = str(input('> '))
+
+    if len(file) != 0:
+        with open(file, 'w') as f:
+            f.writelines(entries)
+    else:
+        for entry in entries:
+            print(entry)
+        print()
+        input('Press Enter to continue...')
+    return
 
 # exception raised if there is no log present
 class NoLogs(Exception):
@@ -133,7 +147,7 @@ class LogReader:
                         stype = input('> ')
                         # check that input is valid
                         stype = int(stype)
-                        assert(stype >= 1 and stype <= 4)
+                        assert(stype >= 1 and stype <= 5)
                         # break out of loop if no exceptions are raised
                         break
                     except (ValueError, AssertionError):
@@ -159,11 +173,13 @@ class LogReader:
 
         # if keyboard interupt is given, end program
         except KeyboardInterrupt:
+            print()
             exit()
 
 
     def all_logs(self) -> None:
         logs = self._all_logs()
+        manage_output(logs)
 
     # read logs by user
     def logs_by_user(self) -> None:
@@ -187,9 +203,13 @@ class LogReader:
                         print(f'Invalid input: {user_ind}')
                 
                 entries = self._get_by_user(user)
+                manage_output(entries)
+                # clear screen 
+                print('\033[2J\033[H',end='')
             
         except KeyboardInterrupt:
             return
+
 
     def logs_by_event(self) -> None:
         try: 
@@ -207,29 +227,51 @@ class LogReader:
                         print(f'Invalid input: {event_ind}')
                 
                 entries = self._get_by_event(event)
+                manage_output(entries)
+                # clear screen 
+                print('\033[2J\033[H',end='')
                        
         except KeyboardInterrupt:
             return
 
+
     def logs_by_timeframe(self) -> None:
         print('NOT IMPLEMENTED YET')
 
+
     def exception_logs(self, last:int = None) -> None:
+
         excs = self._get_exc_info()
 
-
+        while True:
+            print('Enter the amount of latest tracebacks you want')
+            print('Leave blank to get all tracebacks')
+            try:
+                last = input('> ')
+                if len(str(last)) == 0:
+                    break
+                last = int(last)
+                assert(last <= len(excs))
+                break
+            except (ValueError, AssertionError):
+                print('\033[2J\033[H',end='')
+                print(f'Invalid input: {last}')
+        
         if last:
+            print('slice')
             excs = excs[-last:]
 
+        manage_output(excs)
 
-        for entry in excs:
-            print('#########################################################################################')
-            print(entry)
-            print('#########################################################################################')
+        return
+
+
+        
 
     def _close_connection(self) -> None:
         # close connection to database
         self._log.close()
+
 
     def _all_logs(self) -> list:
         with self._log as _cur:
@@ -237,11 +279,13 @@ class LogReader:
         
         return list(map(format_entry, entries))
 
+
     def _get_by_event(self, event:str) -> list:
         with self._log as _cur:
             entries = _cur.execute(f"SELECT * FROM BotLog WHERE event = '{event}'").fetchall()
 
         return list(map(format_entry, entries))
+
 
     def _get_exc_info(self) -> list:
         with self._log as _cur:
@@ -249,14 +293,14 @@ class LogReader:
 
             return list(map(format_excs, excs_tbs))
 
+
     def _get_by_user(self, user:str) -> list:
 
         with self._log as _cur:
             entries = _cur.execute(f"SELECT * FROM BotLog WHERE user = '{user}'").fetchall()
         
-        formatted = list(map(format_entry, entries))
+        return list(map(format_entry, entries))
 
-        return formatted
 
     def _get_unique_users(self) -> list:
         with self._log as _cur:
