@@ -5,33 +5,32 @@ from atexit import register
 from traceback import format_tb
 from types import TracebackType
 
-
+# log path
 LOG_DB_PATH = './lib/logs/log.db'
 
+# log events
 LOG_EVENTS = {1: 'submit', 2: 'new', 3: 'doublesub', 4: 'invalid', 5: 'rolldie', 6: 'link', 7: 'exception', 8: 'su/sd'}
 
-
-
-
+# convert datetime object into an int
 def dtime_to_dint(dtime:datetime) -> int:
     return int(dtime.strftime('%Y%m%d%H%M%S'))
 
+# convert date int to string
 def dint_to_str(dint:int) -> str:
     dtime = datetime.strptime(str(dint), '%Y%m%d%H%M%S')
     return dtime.strftime('%m-%d-%Y %H:%M:%S')
 
-
+# format a log entry into a string
 def format_entry(entry) -> str:
     time, user, event, msg = entry
     return f'[{dint_to_str(time)}] {user}, {event}: {msg}'
 
-
-
+# exception raised if there is no log present
 class NoLogs(Exception):
     def __init__(self) -> None:
         self.msg = 'Log database does not exist'
         
-
+# class to update the log
 class LogUpdate:
     def __init__(self) -> None:
         
@@ -98,8 +97,7 @@ class LogUpdate:
                         {event_time},
                         '{tb}')''')
 
-
-
+# class to read the log
 class LogReader:
     def __init__(self) -> None:
         # check that a log exists
@@ -107,16 +105,12 @@ class LogReader:
             raise NoLogs
         
         # ensure that the database connection is closed on exit
-        register(self.close_connection)
+        register(self._close_connection)
 
         # connect to the log database
         self._log = connect(LOG_DB_PATH)
 
-    def close_connection(self) -> None:
-        # close connection to database
-        self._log.close()
-
-
+    # read logs by user
     def logs_by_user(self, file:str=None) -> list:
         users = self._get_unique_users()
         registry = dict()
@@ -138,7 +132,6 @@ class LogReader:
 
         print(entries)
 
-
     def logs_by_event(self, file:str=None) -> list:
         print('Pick an event to view: ')
         print('1: Game submissions\n2: New User added\n3: Double Submissions\n4: Invalid Games\n5: Die Rolls\n6: Link Requests\n7: Exceptions\n8: Startup/Shutdowns')
@@ -152,13 +145,12 @@ class LogReader:
 
         print(entries)
 
-        
-
     def logs_by_timeframe(self) -> list:
         pass
 
-
-
+    def _close_connection(self) -> None:
+        # close connection to database
+        self._log.close()
 
     def _get_by_event(self, event:str) -> list:
 
@@ -169,7 +161,6 @@ class LogReader:
 
         return formatted
 
-
     def _get_by_user(self, user:str) -> list:
 
         with self._log as _cur:
@@ -178,7 +169,6 @@ class LogReader:
         formatted = list(map(format_entry, entries))
 
         return formatted
-
 
     def _get_unique_users(self) -> list:
         with self._log as _cur:
