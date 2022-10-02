@@ -110,6 +110,9 @@ class WordleBot(commands.Bot):
 
         super().__init__(command_prefix='!', intents=Intents.all(), help_command=None)
 
+        # generate pickle files if needed
+        gen_files()
+
         # Private members / constants
         self._tessConfig = '--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ'
         self._maxThresh = 255       # maximum pixel value
@@ -139,8 +142,6 @@ class WordleBot(commands.Bot):
         self.guild = Object(id=server_id)
         self.db = BotDatabase()
 
-        # generate pickle files if needed
-        gen_files()
 
     def _guessesFromImage(self, image: bytes) -> np.ndarray:
         """Use Tesseract to compile a list of the guesses.
