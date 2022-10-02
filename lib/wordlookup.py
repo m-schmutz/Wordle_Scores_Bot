@@ -47,7 +47,7 @@ class WordLookup:
         valid_words = self._load_object('valid_words')
 
         # return as a set
-        return set(valid_words)
+        return valid_words
 
 
     def _get_word_order(self) -> list[str]:
@@ -115,8 +115,8 @@ class WordLookup:
         # we found that the words in word_order are not contained in valid_words
         valid_words.extend(word_order)
 
-        # sort list in alphabetical order
-        valid_words.sort()
+        # convert list into a set
+        valid_words = set(valid_words)
 
         # store both lists 
         self._pkl_object(word_order, 'word_order')
