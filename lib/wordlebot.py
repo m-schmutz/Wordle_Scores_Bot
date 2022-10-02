@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from random import choice
 
 # pip modules
-from discord import Intents, Object, ButtonStyle, Embed, Color
+from discord import Intents, Object, ButtonStyle, Embed, File, User, Color
 from discord.ui import Button, View
 from discord.ext import commands
 from pytesseract import image_to_string
@@ -54,10 +54,9 @@ class Score(Enum):
 # used to display a users results after a game
 ################################################################################################################################################
 class SubmissionEmbed(Embed):
-    def __init__(self, username: str, stats: BaseStats):
+    def __init__(self, date: datetime, user: User, stats: BaseStats, attachment_filename: str):
         super().__init__(
             color= Color.random(),
-            title= f'Results for **{username}**',
             description= None,
             timestamp= None)
 
@@ -66,7 +65,11 @@ class SubmissionEmbed(Embed):
             ).add_field(name='Games Played', value=stats.games_played, inline=False
             ).add_field(name='Win Rate', value=f'{stats.win_rate:.02f}%', inline=False
             ).add_field(name='Streak', value=stats.streak, inline=False
-            ).add_field(name='Max Streak', value=stats.max_streak, inline=False)
+            ).add_field(name='Max Streak', value=stats.max_streak, inline=False
+            ).set_image(url=f'attachment://{attachment_filename}'
+            # ).set_author(name=user.display_name, icon_url=user.display_avatar.url
+            ).set_footer(icon_url=user.display_avatar.url, text=f'{user.display_name}  ∙  {date}'
+        )
 
 ################################################################################################################################################
 # LinkView class:
@@ -163,8 +166,8 @@ class WordleBot(commands.Bot):
 
         # Convert image (bytes) to OpenCV matrix (cv2.Mat) and get grayscale
         gray = cv2.cvtColor(
-            cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR),
-            cv2.COLOR_BGR2GRAY)
+            src= cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR),
+            code= cv2.COLOR_BGR2GRAY)
 
         # Determine user theme and create a mask of the character cells so we can find their contours
         image_sides = [*gray[:1,:], *gray[-1:,:]]   # Leftmost and rightmost columns of pixels

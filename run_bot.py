@@ -23,10 +23,12 @@ async def _submit(bot:WordleBot, image:Attachment, interaction: Interaction) -> 
     
     # Reply to user's submission with stats.
     await interaction.response.send_message(
+        file= await image.to_file(),
         embed= SubmissionEmbed(
-            username= interaction.user.name,
-            stats= baseStats),
-        file= await image.to_file(spoiler=True))
+            date= date,
+            user= interaction.user,
+            attachment_filename= image.filename,
+            stats= baseStats))
 
     await interaction.followup.send(
         content= bot.getResponse(

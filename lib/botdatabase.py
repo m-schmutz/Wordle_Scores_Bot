@@ -48,11 +48,28 @@ class BaseStats:
         self.win_rate *= 100
 
         # Convert guess distribution from str to dict
-        self.guess_distro = {
-            k: v
-            for k,v in zip(
-                range(1,7),
-                map(int, self.guess_distro.split())) }
+        # self.guess_distro = {
+        #     k: v
+        #     for k,v in zip(
+        #         range(1,7),
+        #         map(int, self.guess_distro.split())) }
+
+        self.WHOLE = '█'
+        self.HALF = '▌'
+
+        farb = {
+            1: self.HALF,
+            2: self.WHOLE,
+            3: self.WHOLE + self.HALF,
+            4: self.WHOLE * 2,
+            5: self.WHOLE * 2 + self.HALF,
+            6: self.WHOLE * 3
+        }
+
+        asdf = ''
+        for i, v in enumerate(farb.values()):
+            asdf += '`' + str(i+1) + ':' + v + '`\n'
+        self.guess_distro = f'{asdf}'
 
 ################################################################################################################################################
 # FullStats class:
