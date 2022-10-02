@@ -6,6 +6,7 @@ lib/logs
 *__pycache__
 
 *.db
+*log
 
 lib/credentials.py
 test.py
