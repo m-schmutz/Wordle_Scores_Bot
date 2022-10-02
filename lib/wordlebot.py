@@ -2,49 +2,36 @@
 from datetime import datetime
 from enum import Enum, auto
 from collections import Counter
-from time import perf_counter
 from dataclasses import dataclass
 from random import choice
 
 # pip modules
-import cv2
-import numpy as np
-import discord
-from discord import Intents, Object, ButtonStyle
+from discord import Intents, Object, ButtonStyle, Embed, Color
 from discord.ui import Button, View
 from discord.ext import commands
 from pytesseract import image_to_string
+import numpy as np
+import cv2
 
 # import local modules
-import ansi
 from botdatabase import *
 from wotd import WOTD
 from wordlookup import WordLookup
-from wordinfo import WordInfo
+import ansi
 
 
-
-def timer(func):
-    def _inner(*args, **kwargs):
-        beg = perf_counter()
-        ret = func(*args, **kwargs)
-        end = perf_counter()
-        print(ansi.magenta(f'[{end-beg:.06f}]: {func.__name__}'))
-        return ret
-    return _inner
-
-### Descriptor/Lightweight Classes
-
-
+################################################################################################################################################
+# InvalidGame class:
+# Used by the WordleBot class whenever the results cannot be determined.
+################################################################################################################################################
 class InvalidGame(Exception):
     def __init__(self, message: str, *args: object) -> None:
         super().__init__(*args)
         self.message = message
 
-
 ################################################################################################################################################
 # Score class:
-# lol idk
+# Used to represent the separate scores of individual letters.
 ################################################################################################################################################
 class Score(Enum):
     CORRECT = auto()
@@ -66,10 +53,10 @@ class Score(Enum):
 # SubmissionEmbed class:
 # used to display a users results after a game
 ################################################################################################################################################
-class SubmissionEmbed(discord.Embed):
+class SubmissionEmbed(Embed):
     def __init__(self, username: str, stats: BaseStats):
         super().__init__(
-            color= discord.Color.random(),
+            color= Color.random(),
             title= f'Results for **{username}**',
             description= None,
             timestamp= None)
@@ -117,14 +104,15 @@ class GameStats:
 ################################################################################################################################################
 class WordleBot(commands.Bot):
     def __init__(self, server_id: int) -> None:
-        super().__init__(
-            command_prefix= '!',
-            intents= Intents.all(),
-            help_command= None)
+        super().__init__(command_prefix='!', intents=Intents.all(), help_command=None)
+
+        # Private members / constants
         self._tessConfig = '--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-        self._maxThresh = 255 # maximum pixel value
-        self._darkThresh = 0x26 # midpoint between the BG and the next darkest color
-        self._lightThresh = 0xeb # midpoint between the BG and the next brightest color
+        self._maxThresh = 255       # maximum pixel value
+        self._darkThresh = 0x26     # midpoint between the BG and the next darkest color
+        self._lightThresh = 0xeb    # midpoint between the BG and the next brightest color
+
+        # Public members
         self.synced = False
         self.guild = Object(id=server_id)
         self.scraper = WOTD()
@@ -154,13 +142,14 @@ class WordleBot(commands.Bot):
         ### Get cell contours ###
 
         # Convert image (bytes) to OpenCV matrix (cv2.Mat) and get grayscale
-        mat = cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR)
-        gray = cv2.cvtColor(mat, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(
+            cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR),
+            cv2.COLOR_BGR2GRAY)
 
-        # Create a mask of the character cells so we can find their contours
-        if np.median(gray[:1,:]) < 200: # Dark theme
+        # Determine user theme and create a mask of the character cells so we can find their contours
+        if np.median(gray[:1,:]) < 200:
             _, cellmask = cv2.threshold(gray, self._darkThresh, self._maxThresh, cv2.THRESH_BINARY)
-        else: # Light theme
+        else:
             _, cellmask = cv2.threshold(gray, self._lightThresh, self._maxThresh, cv2.THRESH_BINARY_INV)
         contours, _ = cv2.findContours(cellmask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -184,6 +173,7 @@ class WordleBot(commands.Bot):
             raise InvalidGame('Could not find the game!')
         _, charmask = cv2.threshold(gray, self._lightThresh, self._maxThresh, cv2.THRESH_BINARY_INV)
 
+
         ### Transform charmask to increase legibility ###
 
         # squeeze letters horizontally in reverse order since cv2.findContours works
@@ -201,14 +191,15 @@ class WordleBot(commands.Bot):
             for (_, y) in contour)
         charmask = charmask[min(ys):max(ys), :]
 
+
         ### Get dem words ###
 
         # Generate mask and feed Tesseract :) *pat* *pat* good boy
-        text:str = image_to_string(image=charmask, lang="eng", config=self._tessConfig)
+        text = image_to_string(image=charmask, lang="eng", config=self._tessConfig)
         guess_list = text.strip().lower().split('\n')
 
         # Validate guesses
-        valid_words = set(WordLookup().get_valid_words())
+        valid_words = WordLookup().get_valid_words()
         for guess in guess_list:
             if guess not in valid_words:
                 raise InvalidGame('Invalid word detected!')
@@ -272,19 +263,20 @@ class WordleBot(commands.Bot):
         #   would-be yellows have the chance.
         guesses = self._guessesFromImage(image)
         wotd = self.scraper.wotd(submissionDate)
-        counts = Counter(wotd)
+        orig_counts = Counter(wotd)
         scores = np.full(shape=guesses.shape, fill_value=Score.INCORRECT)
         uniques = [set() for _ in range(5)]
         tC = tM = uC = uM = 0
+
         for row, guess in enumerate(guesses):
-            _counts = counts.copy()
+            counts = orig_counts.copy()
             remaining = []
 
             # score CORRECT LETTERS in CORRECT POSITION (Green)
             for col, gc, wc in zip(range(5), guess, wotd):
                 if gc == wc:
                     scores[row,col] = Score.CORRECT
-                    _counts[gc] -= 1
+                    counts[gc] -= 1
                     tC += 1
 
                     #(1/2) start adding unique chars...
@@ -296,9 +288,9 @@ class WordleBot(commands.Bot):
 
             # score CORRECT LETTERS in WRONG POSITION (Yellow)
             for row, col, gc in remaining:
-                if gc in wotd and _counts[gc] > 0:
+                if gc in wotd and counts[gc] > 0:
                     scores[row,col] = Score.MISPLACED
-                    _counts[gc] -= 1
+                    counts[gc] -= 1
                     tM += 1
                     if gc not in uniques[col]:
                         uM += 1
@@ -310,14 +302,15 @@ class WordleBot(commands.Bot):
             guessTable= guesses,
             numGuesses= guesses.shape[0],
             solution= wotd,
-            won= all(s == Score.CORRECT for s in scores[-1]),
             uniqueCorrect= uC,
             uniqueMisplaced= uM,
-            uniqueAll= sum(len(set) for set in uniques),
             totalCorrect= tC,
-            totalMisplaced= tM)
+            totalMisplaced= tM,
+            won= all(s == Score.CORRECT for s in scores[-1]),
+            uniqueAll= sum(len(set) for set in uniques)
+        )
 
-    ### Overridden methods
+    ### Overridden Discord Bot class methods
     async def on_ready(self):
 
         # Wait for client cache to load

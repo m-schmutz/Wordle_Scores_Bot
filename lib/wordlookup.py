@@ -42,13 +42,13 @@ class WordLookup:
         return get_wotd(today)
 
   
-    def get_valid_words(self) -> list:
+    def get_valid_words(self) -> set:
         '''Returns the list of valid words retrieved from the website'''
         # load the valid_words list from pickle file
         valid_words = self._load_object('valid_words')
 
-        # return the list
-        return valid_words
+        # return as a set
+        return set(valid_words)
 
 
     def _get_word_order(self) -> list[str]:

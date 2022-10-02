@@ -37,7 +37,6 @@ async def _submit(bot:WordleBot, image:Attachment, interaction: Interaction) -> 
     # return the event (submit, new)
     return event
 
-
 def main() -> None:
 
     # initialize WordleBot
@@ -85,8 +84,7 @@ def main() -> None:
         except:
             exc_type, _, exc_traceback = exc_info()
             log.update(dtime, user, 'exception', f'{exc_type.__name__} raised', traceback=exc_traceback)
-
-        
+    
     # command to get wordle link
     @slash_cmd(description='Get the link to the Wordle webpage.', guild=bot.guild)
     async def link(interaction: Interaction) -> None:
@@ -127,6 +125,6 @@ def main() -> None:
     bot.run(bot_token)
 
 
+
 if __name__ == '__main__':
     main()
-    
