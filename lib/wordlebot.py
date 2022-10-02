@@ -259,8 +259,8 @@ class WordleBot(commands.Bot):
         # Read user guesses
         guesses = self._guessesFromImage(image)
 
-        # Initialize WOTD counts
-        wotd = get_wotd(submissionDate)
+        # get word of the day as well as the wordle number
+        wotd, wrdl_num = get_wotd(submissionDate, wrdl_num=True)
         orig_counts = Counter(wotd)
 
         # Initialize scores
