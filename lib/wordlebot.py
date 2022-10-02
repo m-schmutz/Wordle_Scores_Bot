@@ -114,6 +114,23 @@ class WordleBot(commands.Bot):
         self._darkThresh = 0x26     # midpoint between the dark theme BG and the next darkest color
         self._lightThresh = 0xeb    # midpoint between the light theme BG and the next brightest color
         self._valid_words = WordLookup().get_valid_words()
+        self._responses = {
+            0: (r"You suck!",
+                r"I'd say better luck next time, but you clearly don't have any luck.",
+                r"Maybe [this](https://freekidsbooks.org/reading-level/children/) can help you."),
+            1: (r"Riiiiight. I'm sure you didn't look it up.",
+                r"@everyone check out how totally real this game was"),
+            2: (r"Damn that's crazy, I can google too.",
+                r"hmmmmmm 🤔🤔"),
+            3: (r"Ok?",
+                r"Yea"),
+            4: (r"Cool.",
+                r"Yep, that's definitely a Wordle game."),
+            5: (r"Garbage.",
+                r"My grandma could do better."),
+            6: (r"Jesus, it took you long enough.",
+                r"Bet you were sweating profusely on that last guess.")
+        }
 
         # Public members
         self.synced = False
@@ -214,33 +231,10 @@ class WordleBot(commands.Bot):
         return np.array( [list(g) for g in guess_list] )
 
     def getResponse(self, solved: bool, numGuesses: int) -> str:
-        if solved:
-            if numGuesses == 1:
-                return choice((
-                    'Riiiiight. I\'m sure you didn\'t look it up.',
-                    'CHEATER!!!!'))
+        if not solved:
+            numGuesses = 0
 
-            if numGuesses < 3:
-                return choice((
-                    'Damn that\'s crazy... I have google too.',
-                    'hmmmmmm 🤔🤔'))
-
-            if numGuesses < 5:
-                return choice((
-                    'Ok?',
-                    'Yea',
-                    'Cool.',
-                    'Yep, that\'s definitely a Wordle game.'))
-
-            return choice((
-                f'It took you {numGuesses} guesses? Lmao.',
-                'Garbage.',
-                'My grandma could do better.'))
-
-        return choice((
-            'You suck!',
-            'I\'d say better luck next time, but you clearly don\'t have any luck.',
-            'Maybe [this](https://freekidsbooks.org/reading-level/children/) can help you.'))
+        return choice(self._responses[numGuesses])
 
     def scoreGame(self, image: bytes, submissionDate: datetime) -> GameStats:
         """Parse a screenshot of a Wordle game and return a GameStats object containing
