@@ -15,8 +15,7 @@ import cv2
 
 # import local modules
 from botdatabase import *
-from wotd import WOTD
-from wordlookup import WordLookup
+from wotd import gen_files, get_wotd, get_valid_words
 import ansi
 
 
@@ -113,7 +112,7 @@ class WordleBot(commands.Bot):
         self._maxThresh = 255       # maximum pixel value
         self._darkThresh = 0x26     # midpoint between the dark theme BG and the next darkest color
         self._lightThresh = 0xeb    # midpoint between the light theme BG and the next brightest color
-        self._valid_words = WordLookup().get_valid_words()
+        self._valid_words = get_valid_words()
         self._responses = {
             0: (r"You suck!",
                 r"I'd say better luck next time, but you clearly don't have any luck.",
@@ -135,8 +134,10 @@ class WordleBot(commands.Bot):
         # Public members
         self.synced = False
         self.guild = Object(id=server_id)
-        self.scraper = WOTD()
         self.db = BotDatabase()
+
+        # generate pickle files if needed
+        gen_files()
 
     def _guessesFromImage(self, image: bytes) -> np.ndarray:
         """Use Tesseract to compile a list of the guesses.
@@ -259,7 +260,7 @@ class WordleBot(commands.Bot):
         guesses = self._guessesFromImage(image)
 
         # Initialize WOTD counts
-        wotd = self.scraper.wotd(submissionDate)
+        wotd = get_wotd(submissionDate)
         orig_counts = Counter(wotd)
 
         # Initialize scores
