@@ -2,7 +2,7 @@ from subprocess import run
 from ansi import green
 from os import getcwd, mkdir
 from os.path import basename, exists
-
+from wotd import gen_files
 # objects to be imported
 __all__ = ['install', 'remove']
 
@@ -64,8 +64,14 @@ def install() -> None:
     if not exists(DB_DIR): mkdir(DB_DIR)
     if not exists(PICKLES_DIR): mkdir(PICKLES_DIR)
 
-    # notify user of progress
+    # notify user of step
     print(green('lib subdirectories created'))
+
+    # generate pickle files if needed
+    created = gen_files()
+
+    # notify user of step
+    print(green('Pickle files generated')) if created else print(green('Have existing pickle files'))
 
     # combine all apt commands needed
     apt_cmds = ';'.join(f'sudo apt-get install {pkg} -y' for pkg in REQ_APT) + ';sudo apt-get clean'
@@ -79,19 +85,19 @@ def install() -> None:
         # update and upgrade packages
         run(UPDATE_UPGRADE, stdin=0, stdout=outlog, stderr=errlog, shell=True, executable=BASH)
 
-        # notify user of progress
+        # notify user of step
         print(green('update/upgrade complete'))
 
         # install apt packages
         run(apt_cmds, stdout=outlog, stderr=errlog, shell=True, executable=BASH)
 
-        # notify user of progress
+        # notify user of step
         print(green('apt packages installed'))
 
         # create the virtual environment
         run(CREATE_ENV, stdout=outlog, stderr=errlog, shell=True, executable=BASH)
 
-        # notify user of progress
+        # notify user of step
         print(green('virtual environment created'))
 
         # install pip packages
