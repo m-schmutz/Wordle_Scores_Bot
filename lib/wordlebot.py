@@ -113,6 +113,7 @@ class WordleBot(commands.Bot):
         self._maxThresh = 255       # maximum pixel value
         self._darkThresh = 0x26     # midpoint between the dark theme BG and the next darkest color
         self._lightThresh = 0xeb    # midpoint between the light theme BG and the next brightest color
+        self._valid_words = WordLookup().get_valid_words()
 
         # Public members
         self.synced = False
@@ -206,9 +207,8 @@ class WordleBot(commands.Bot):
         guess_list = text.strip().lower().split('\n')
 
         # Validate guesses
-        valid_words = WordLookup().get_valid_words()
-        if any(g not in valid_words for g in guess_list):
-            raise InvalidGame('Invalid word detected!')
+        if any(g not in self._valid_words for g in guess_list):
+            raise InvalidGame(f'Tesseract misidentified a word.\n  output = {guess_list}')
 
         # Return guesses as 2-D numpy array
         return np.array( [list(g) for g in guess_list] )
