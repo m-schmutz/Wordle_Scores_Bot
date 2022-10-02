@@ -44,6 +44,9 @@ class BaseStats:
     max_streak: int
 
     def __post_init__(self):
+        # multiply win_rate to convert to %
+        self.win_rate *= 100
+
         # Convert guess distribution from str to dict
         self.guess_distro = {
             k: v
