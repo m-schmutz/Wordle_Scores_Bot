@@ -4,7 +4,6 @@ from re import search, findall
 from pickle import load, dump
 from os.path import exists
 from wotd import get_wotd
-from typing import Tuple
 
 ################################################################################################################################################
 # WordLookup class:
@@ -64,7 +63,7 @@ class WordLookup:
        return exists('./lib/wordle_pickles/word_order.pkl') and exists('./lib/wordle_pickles/valid_words.pkl')
             
     @staticmethod
-    def _get_word_banks() -> Tuple[list, list]:
+    def _get_word_banks() -> tuple[list, list]:
         # get the webpage source as text from the website
         web_source_txt = get('https://www.nytimes.com/games/wordle/index.html').text
 

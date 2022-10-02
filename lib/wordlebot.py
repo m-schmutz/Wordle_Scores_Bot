@@ -103,14 +103,16 @@ class GameStats:
 # Driver code for the Wordle Bot
 ################################################################################################################################################
 class WordleBot(commands.Bot):
+
     def __init__(self, server_id: int) -> None:
+
         super().__init__(command_prefix='!', intents=Intents.all(), help_command=None)
 
         # Private members / constants
         self._tessConfig = '--oem 3 --psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ'
         self._maxThresh = 255       # maximum pixel value
-        self._darkThresh = 0x26     # midpoint between the BG and the next darkest color
-        self._lightThresh = 0xeb    # midpoint between the BG and the next brightest color
+        self._darkThresh = 0x26     # midpoint between the dark theme BG and the next darkest color
+        self._lightThresh = 0xeb    # midpoint between the light theme BG and the next brightest color
 
         # Public members
         self.synced = False
@@ -147,7 +149,8 @@ class WordleBot(commands.Bot):
             cv2.COLOR_BGR2GRAY)
 
         # Determine user theme and create a mask of the character cells so we can find their contours
-        if np.median(gray[:1,:]) < 200:
+        image_sides = [*gray[:1,:], *gray[-1:,:]]   # Leftmost and rightmost columns of pixels
+        if np.median(image_sides) < 200:
             _, cellmask = cv2.threshold(gray, self._darkThresh, self._maxThresh, cv2.THRESH_BINARY)
         else:
             _, cellmask = cv2.threshold(gray, self._lightThresh, self._maxThresh, cv2.THRESH_BINARY_INV)
@@ -160,7 +163,7 @@ class WordleBot(commands.Bot):
             if c.shape != (4,1,2):
                 continue
             
-            # Skip ~non-squares
+            # Skip non-squares (rough estimate)
             _,_,w,h = cv2.boundingRect(c)
             if abs(w-h) > (w+h)*0.015:
                 continue
@@ -169,14 +172,17 @@ class WordleBot(commands.Bot):
 
         # Remove all axis of length one since they are useless
         cell_contours = np.squeeze(filtered)
+
         if len(cell_contours) != 30:
             raise InvalidGame('Could not find the game!')
+        
+        # Generate a mask of the characters
         _, charmask = cv2.threshold(gray, self._lightThresh, self._maxThresh, cv2.THRESH_BINARY_INV)
 
 
         ### Transform charmask to increase legibility ###
 
-        # squeeze letters horizontally in reverse order since cv2.findContours works
+        # squeeze letters closer horizontally in reverse order since cv2.findContours works
         # from SE to NW and we want our contours organized from NW to SE (i.e. guess order).
         cols = []
         for c in cell_contours[:5]:
@@ -185,8 +191,9 @@ class WordleBot(commands.Bot):
             cols.append(charmask[:, x+off : x+w-off])
         charmask = cv2.hconcat(cols[::-1])
 
-        # crop vertically
-        ys = set(y
+        # trim top and bottom edges of image
+        ys = set(
+            y
             for contour in cell_contours
             for (_, y) in contour)
         charmask = charmask[min(ys):max(ys), :]
@@ -195,14 +202,13 @@ class WordleBot(commands.Bot):
         ### Get dem words ###
 
         # Generate mask and feed Tesseract :) *pat* *pat* good boy
-        text = image_to_string(image=charmask, lang="eng", config=self._tessConfig)
+        text = image_to_string(image=charmask, lang='eng', config=self._tessConfig)
         guess_list = text.strip().lower().split('\n')
 
         # Validate guesses
         valid_words = WordLookup().get_valid_words()
-        for guess in guess_list:
-            if guess not in valid_words:
-                raise InvalidGame('Invalid word detected!')
+        if any(g not in valid_words for g in guess_list):
+            raise InvalidGame('Invalid word detected!')
 
         # Return guesses as 2-D numpy array
         return np.array( [list(g) for g in guess_list] )
@@ -253,27 +259,31 @@ class WordleBot(commands.Bot):
         ## Returns
 
         object : `GameStats`
-            DTO for easy use of various game stats.
         """
 
-        # Get user guesses and initialize game data, then score the game.
-        # It's easier to score yellows after greens as opposed to "inline". Otherwise,
-        #   we would have to look ahead for potential greens because green has a higher
-        #   precedence and therefore consumes one of the characters counts before any
-        #   would-be yellows have the chance.
+        # Read user guesses
         guesses = self._guessesFromImage(image)
+
+        # Initialize WOTD counts
         wotd = self.scraper.wotd(submissionDate)
         orig_counts = Counter(wotd)
+
+        # Initialize scores
         scores = np.full(shape=guesses.shape, fill_value=Score.INCORRECT)
         uniques = [set() for _ in range(5)]
         tC = tM = uC = uM = 0
 
+        # Score the game
+        # It's easier to score yellows after greens as opposed to "inline". Otherwise,
+        #   we would have to look ahead for potential greens because green has a higher
+        #   precedence and therefore consumes one of the characters counts before any
+        #   would-be yellows have the chance.
         for row, guess in enumerate(guesses):
             counts = orig_counts.copy()
             remaining = []
 
             # score CORRECT LETTERS in CORRECT POSITION (Green)
-            for col, gc, wc in zip(range(5), guess, wotd):
+            for col, (gc, wc) in enumerate(zip(guess, wotd)):
                 if gc == wc:
                     scores[row,col] = Score.CORRECT
                     counts[gc] -= 1
@@ -292,6 +302,7 @@ class WordleBot(commands.Bot):
                     scores[row,col] = Score.MISPLACED
                     counts[gc] -= 1
                     tM += 1
+
                     if gc not in uniques[col]:
                         uM += 1
 
@@ -309,6 +320,7 @@ class WordleBot(commands.Bot):
             won= all(s == Score.CORRECT for s in scores[-1]),
             uniqueAll= sum(len(set) for set in uniques)
         )
+
 
     ### Overridden Discord Bot class methods
     async def on_ready(self):
