@@ -29,7 +29,9 @@ class DoubleSubmit(Exception):
 ################################################################################################################################################
 @dataclass
 class BaseStats:
-    """Default statistics to return upon a submission.
+    """
+    Default statistics to return upon a submission.
+    
     ---
     - guesses distribution
     - \# games played
@@ -432,3 +434,4 @@ class BotDatabase:
 
         # return FullStats object
         return FullStats(_raw)
+        
