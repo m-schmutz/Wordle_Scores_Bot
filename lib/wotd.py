@@ -6,16 +6,19 @@ from re import search, findall
 from pickle import load, dump
 from os.path import exists
 
+# paths to both pickle files that store word lists
 WO_PATH = './lib/wordle_pickles/word_order.pkl'
-
 VW_PATH = './lib/wordle_pickles/valid_words.pkl'
 
 # gets the word of the day from the api endpoint
 def get_wotd(dtime:datetime, wrdl_num:bool=False) -> str|Tuple[str, int]:
     '''
     Returns word of the day\n
-    If count is true returns wotd and count in tuple:\n
-    get_wotd(<dtime>, wrdl_num=True) -> (<wotd>, <wrdl_num>)
+    ---
+    #### If count is true returns wotd and count in tuple:\n
+    #### get_wotd(<dtime>, wrdl_num=True) -> (<wotd>, <wrdl_num>)
+    #### get_wotd(<dtime>) -> (<wotd>)
+    
     '''
     # convert datetime to string in form YYYY-MM-DD
     date = dtime.strftime('%Y-%m-%d')
@@ -65,21 +68,22 @@ def _get_word_banks() -> Tuple[list, frozenset]:
     word_order = banks[0][0].replace('"', '').split(',')
     valid_words = set(banks[1][0].replace('"', '').split(','))
     
+    # update the valid words with the words in the word list
     valid_words.update(word_order)
 
-    # return the two lists as sets
-    return word_order, valid_words
+    # return the word order as a list and valid words as a frozen set
+    return word_order, frozenset(valid_words)
 
 
 # load in pickle file
-def _load_pkl(path:str) -> frozenset:
+def _load_pkl(path:str) -> frozenset|list:
     # load in set from pickle file and return
     with open(path, 'rb') as f:
         return load(f)
 
 
 # store object as a pickle file
-def _store_pkl(s, path:str) -> None:
+def _store_pkl(s:frozenset|list, path:str) -> None:
     # open the file path to write the pickle data
     with open(path, 'wb') as f:
         # write the pickled data to file_path
@@ -93,7 +97,7 @@ def gen_files() -> bool:
     vw_exist = exists(VW_PATH)
 
     # check if both files exist. If they do exit function
-    if not wo_exist and vw_exist:
+    if wo_exist and vw_exist:
         # files were not generated
         return False
     
