@@ -42,13 +42,13 @@ class LogUpdate():
             tb_entry = format_excs(dtime, user, exc_name, traceback)
 
             # write the entry to the log file
-            with open(TB_LOG) as log:
+            with open(TB_LOG, 'a') as log:
                 log.write(tb_entry)
 
         # generate the log entry
         entry = f'{dtime.strftime("%m-%d-%Y %H:%M:%S")},{server},{user},{event},{exc_name}\n'
 
         # write the log entry to the log file
-        with open(BOT_LOG) as log:
+        with open(BOT_LOG, 'a') as log:
             log.write(entry)
     
