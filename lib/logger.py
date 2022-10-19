@@ -4,8 +4,8 @@ from traceback import format_tb
 from atexit import register
 
 # defines the paths to the log files
-BOT_LOG = './bot.log'
-TB_LOG = './traceback.log'
+BOT_LOG = './lib/logs/bot.log'
+TB_LOG = './lib/logs/traceback.log'
 
 # format the exception to be readable in log
 def format_excs(dtime:datetime, user:str, exc_name:str, traceback:TracebackType) -> str:
