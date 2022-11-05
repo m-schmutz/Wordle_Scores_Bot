@@ -15,7 +15,7 @@ def format_excs(dtime:datetime, user:str, exc_name:str, traceback:TracebackType)
     return f'[{dtime.strftime("%m-%d-%Y %H:%M:%S")}] -> {user}, Exception: {exc_name}\n{tb}\n'
     
 
-class LogUpdate():
+class Log():
     def __init__(self) -> None:
         # register log_shutdown method so that connection is closed on shutdown
         register(self._log_shutdown)
@@ -28,7 +28,7 @@ class LogUpdate():
 
 
     # adds start up entry to the log file
-    def log_startup(self) -> None:
+    def start(self) -> None:
         # update log on bot startup
         self.update(datetime.now(), '', '', 'Start up')
 
