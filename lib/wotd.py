@@ -6,8 +6,8 @@ from re import search, findall
 from pickle import load, dump
 from os.path import exists
 
-# first wordle, this is used to locate the word list
-FIRST_WORDLE = 'cigar'
+# the last valid 5 letter word, this is used to locate the word list
+LAST_VALID_WORD = 'zymic'
 
 # paths to both pickle files that store word lists
 WO_PATH = './lib/wordle_pickles/word_order.pkl'
@@ -72,7 +72,7 @@ def _get_word_banks() -> Tuple[list, frozenset]:
     all_words = str(banks[0][0]).replace('\"', '').split(',')
 
     # slice out the word of the days
-    word_order = all_words[all_words.index(FIRST_WORDLE):]
+    word_order = all_words[all_words.index(LAST_VALID_WORD)+1:]
 
     # return the list of valid words and the set of valid words
     return word_order, frozenset(all_words)
@@ -117,4 +117,4 @@ def gen_files() -> bool:
     
     # files were generated
     return True
-        
+    
