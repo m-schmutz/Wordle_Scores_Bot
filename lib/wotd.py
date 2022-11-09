@@ -6,18 +6,22 @@ from re import search, findall
 from pickle import load, dump
 from os.path import exists
 
+# first wordle, this is used to locate the word list
+FIRST_WORDLE = 'cigar'
+
 # paths to both pickle files that store word lists
 WO_PATH = './lib/wordle_pickles/word_order.pkl'
 VW_PATH = './lib/wordle_pickles/valid_words.pkl'
 
 # gets the word of the day from the api endpoint
-def get_wotd(dtime:datetime, wrdl_num:bool=False) -> str|Tuple[str, int]:
+def get_wotd(dtime:datetime=datetime.now(), wrdl_num:bool=False) -> str|Tuple[str, int]:
     '''
     Returns word of the day\n
     ---
-    #### If count is true returns wotd and count in tuple:\n
-    #### get_wotd(<dtime>, wrdl_num=True) -> (<wotd>, <wrdl_num>)
-    #### get_wotd(<dtime>) -> (<wotd>)
+    #### If dtime parameter is left blank, the function will use the current day
+    #### Otherwise datetime passed is used
+
+    #### If wrdl_num is set to True, the function will return the wotd and the wordle number in a tuple
     
     '''
     # convert datetime to string in form YYYY-MM-DD
@@ -64,17 +68,16 @@ def _get_word_banks() -> Tuple[list, frozenset]:
     # get the banks from the javascript file
     banks = findall('\[((["][a-z]{5}["][,]?){50,})\]', js_file_txt)
 
-    # remove the banks returned from tuples and fix formatting
-    word_order = banks[0][0].replace('"', '').split(',')
-    valid_words = set(banks[1][0].replace('"', '').split(','))
+    # split up the string by ',' to get each word by itself
+    all_words = str(banks[0][0]).replace('\"', '').split(',')
+
+    # slice out the word of the days
+    word_order = all_words[all_words.index(FIRST_WORDLE):]
+
+    # return the list of valid words and the set of valid words
+    return word_order, frozenset(all_words)
+
     
-    # update the valid words with the words in the word list
-    valid_words.update(word_order)
-
-    # return the word order as a list and valid words as a frozen set
-    return word_order, frozenset(valid_words)
-
-
 # load in pickle file
 def _load_pkl(path:str) -> frozenset|list:
     # load in set from pickle file and return
