@@ -7,18 +7,22 @@ from atexit import register
 BOT_LOG = './lib/logs/bot.log'
 TB_LOG = './lib/logs/traceback.log'
 
-# format the exception to be readable in log
-def format_excs(dtime:datetime, user:str, exc_name:str, traceback:TracebackType) -> str:
-    # get the print representation of the traceback
-    tb = "".join(format_tb(traceback))
-    # return the formatted entry
-    return f'[{dtime.strftime("%m-%d-%Y %H:%M:%S")}] -> {user}, Exception: {exc_name}\n{tb}\n'
+
     
 
-class Log():
+class BotLog():
+    '''
+    This is a logger for the WordleBot
+    
+    ---
+    All logs for the bot are stored in the lib/logs directory
+    - bot.log: logs all bot/user interactions
+    - traceback.log: contains the tracebacks of any exceptions that have occurred
+    '''
     def __init__(self) -> None:
-        # register log_shutdown method so that connection is closed on shutdown
-        register(self._log_shutdown)
+        # register when bot terminates so that log is updated
+        # (This makes sure that the log will be updated on an unexpected shutdown)
+        register(self._log_shutdown())
 
 
     # adds shutdown entry to the log file
@@ -28,18 +32,26 @@ class Log():
 
 
     # adds start up entry to the log file
-    def start(self) -> None:
+    def log_startup(self) -> None:
         # update log on bot startup
         self.update(datetime.now(), '', '', 'Start up')
 
 
-    # append entry to file
+    # format the exception to be readable in log
     @staticmethod
-    def update(dtime:datetime, server:str, user:str, event:str, traceback:TracebackType=None, exc_name:str='') -> None:
+    def format_excs(dtime:datetime, user:str, exc_name:str, traceback:TracebackType) -> str:
+        # get the print representation of the traceback
+        tb = "".join(format_tb(traceback))
+        # return the formatted entry
+        return f'[{dtime.strftime("%m-%d-%Y %H:%M:%S")}] -> {user}, Exception: {exc_name}\n{tb}\n'
+
+
+    # append entry to file
+    def update(self,dtime:datetime, server:str, user:str, event:str, traceback:TracebackType=None, exc_name:str='') -> None:
         # check if there is a traceback
         if traceback:
             # create traceback log entry if it exists
-            tb_entry = format_excs(dtime, user, exc_name, traceback)
+            tb_entry = self.format_excs(dtime, user, exc_name, traceback)
 
             # write the entry to the log file
             with open(TB_LOG, 'a') as log:
