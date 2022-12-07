@@ -17,6 +17,7 @@ import cv2
 from botdatabase import *
 from wotd import gen_files, get_wotd, get_valid_words
 import ansi
+from logger import BotLog
 
 
 ################################################################################################################################################
@@ -141,6 +142,7 @@ class WordleBot(commands.Bot):
         self.synced = False
         self.guild = Object(id=server_id)
         self.db = BotDatabase()
+        self.log = BotLog()
 
 
     def _guessesFromImage(self, image: bytes) -> np.ndarray:
@@ -331,5 +333,8 @@ class WordleBot(commands.Bot):
         if not self.synced:
             await self.tree.sync(guild=self.guild)
             self.synced = True
+
+        # update log with startup time
+        self.log.log_startup()
 
         print(f'{self.user} ready!')

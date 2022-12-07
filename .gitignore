@@ -1,4 +1,5 @@
 *.backup
+*.vscode
 venv/
 lib/bot_database/
 lib/wordle_pickles/
