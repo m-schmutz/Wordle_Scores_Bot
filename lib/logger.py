@@ -8,8 +8,6 @@ BOT_LOG = './lib/logs/bot.log'
 TB_LOG = './lib/logs/traceback.log'
 
 
-    
-
 class BotLog():
     '''
     This is a logger for the WordleBot
@@ -42,12 +40,13 @@ class BotLog():
     def format_excs(dtime:datetime, user:str, exc_name:str, traceback:TracebackType) -> str:
         # get the print representation of the traceback
         tb = "".join(format_tb(traceback))
+
         # return the formatted entry
         return f'[{dtime.strftime("%m-%d-%Y %H:%M:%S")}] -> {user}, Exception: {exc_name}\n{tb}\n'
 
 
     # append entry to file
-    def update(self,dtime:datetime, server:str, user:str, event:str, traceback:TracebackType=None, exc_name:str='') -> None:
+    def update(self, dtime:datetime, server:str, user:str, event:str, traceback:TracebackType=None, exc_name:str='', guesses:str='') -> None:
         # check if there is a traceback
         if traceback:
             # create traceback log entry if it exists
