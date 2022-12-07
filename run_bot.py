@@ -1,7 +1,7 @@
 #!./venv/bin/python3.10
 from lib import *
 
-async def _submit(bot:WordleBot, image:Attachment, interaction: Interaction) -> str:
+async def _submit(bot:WordleBot, image:Attachment, interaction: Interaction) -> None:
     
     # Grab date of submission and try to score the game. If the game
     # cannot be processed, reply with an error message and return.
@@ -11,16 +11,9 @@ async def _submit(bot:WordleBot, image:Attachment, interaction: Interaction) -> 
 
     # Submit scores to database. If the user has already submit
     # today, then reply with an error message and return.
-    baseStats, event = bot.db.submit_data(
-        username= str(interaction.user),
-        dtime= date,
-        win= game.won,
-        guesses= game.numGuesses,
-        greens= game.uniqueCorrect,
-        yellows= game.uniqueMisplaced,
-        uniques= game.uniqueAll)
+    baseStats = bot.submit_game(date, str(interaction.user), game) 
         
-    
+        
     # Reply to user's submission with stats.
     await interaction.response.send_message(
         file= await image.to_file(),
@@ -36,17 +29,12 @@ async def _submit(bot:WordleBot, image:Attachment, interaction: Interaction) -> 
             numGuesses= game.numGuesses),
         ephemeral= True)
 
-    # return the event (submit, new)
-    return event
 
 def main() -> None:
 
     # initialize WordleBot
     bot = WordleBot(server_id)
     slash_cmd = bot.tree.command
-
-    # initialize log
-    log = LogUpdate()
 
     # command to submit a game
     @slash_cmd(description='Submit a screenshot of your Wordle game!', guild=bot.guild)
@@ -59,33 +47,20 @@ def main() -> None:
         try:
             # try to submit game
             # update the database and return the event type
-            event = await _submit(bot, image, interaction)
+            await _submit(bot, image, interaction)
 
-            # check if the user is new
-            if event == 'new':
-                log.update(dtime, user, event, f'{user} added as new user')
-                event = 'submit'
-
-            # log submitted game
-            log.update(dtime, user, event, f'{user} submitted game')
-
-        # log InvalidGame
+        # otherwise invalid game, update user
         except InvalidGame as e:
-            # update log about invalid game
-            log.update(dtime, user, 'invalid', f'{user} submitted invalid game')
             return await interaction.response.send_message(content=e.message, ephemeral=True)
 
 
         # log DoubleSubmit
         except DoubleSubmit as e:
-            # update log about double submit
-            log.update(dtime, user, 'doublesub', f'{user} attempted double submit')
             return await interaction.response.send_message(content=e.message, ephemeral=True)
 
         # log un-handled exception
         except:
             exc_type, _, exc_traceback = exc_info()
-            log.update(dtime, user, 'exception', f'{exc_type.__name__} raised', traceback=exc_traceback)
     
     # command to get wordle link
     @slash_cmd(description='Get the link to the Wordle webpage.', guild=bot.guild)
@@ -99,12 +74,10 @@ def main() -> None:
             # try to print link
             # update log about double submit
             await interaction.response.send_message(view= LinkView(), ephemeral= True)
-            log.update(dtime, user, 'link', f'{user} requested link')
 
         # log un-handled exception
         except:
             exc_type, _, exc_traceback = exc_info()
-            log.update(dtime, user, 'exception', f'{exc_type.__name__} raised', traceback=exc_traceback)
 
     @slash_cmd(description='Roll an N-sided die!', guild=bot.guild)
     async def roll(interaction: Interaction, faces: app_commands.Range[int, 2, None]) -> None:
@@ -116,14 +89,10 @@ def main() -> None:
         try:
             # give user die roll and update the log
             await interaction.response.send_message(f'You rolled a {randint(1, faces)}!')
-            log.update(dtime, user, 'rolldie', f'{user} requested die roll')
 
         except:
             exc_type, _, exc_traceback = exc_info()
-            log.update(dtime, user, 'exception', f'{exc_type.__name__} raised', traceback=exc_traceback)
 
-    # update log about start up
-    log.update(datetime.now(), 'WordleBot', 'su/sd', 'WordleBot Starting up')
     bot.run(bot_token)
 
 

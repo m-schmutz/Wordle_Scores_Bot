@@ -342,6 +342,42 @@ class WordleBot(commands.Bot):
 
         print(f'{self.user} ready!')
 
-    def update_log(self, dtime:datetime, event:str, exc_name:str='', server:str='', user:str='', win:str='', guesses:str='', greens:str='', yellows:str='', uniques:str='', traceback:TracebackType=None):
+    # updates the log with the provided information
+    def update_log(self, dtime:datetime, event:str, exc_name:str='', server:str='', user:str='', win:str='', guesses:str='', greens:str='', yellows:str='', uniques:str='', traceback:TracebackType=None) -> None:
         # update the log with passed data
         self.log.update(dtime=dtime, event=event, exc_name=exc_name, server=server, user=user, win=win, guesses=guesses, greens=greens, yellows=yellows, uniques=uniques, traceback=traceback)
+
+
+    # updates the database with the provided game
+    def submit_game(self, date:datetime, user:str, game:GameStats) -> GameStats|None:
+        '''
+        Takes in a date, user and game (Gamestats object) and
+        stores data in the database.
+
+        ---
+        Function handles DoubleSubmit exception and stores all submission events in log
+        '''
+        # try to add game to the database
+        try:
+            # submit game to the database
+            baseStats, event_type = self.db.submit_data(
+            username= user,
+            dtime= date,
+            win= game.won,
+            guesses= game.numGuesses,
+            greens= game.uniqueCorrect,
+            yellows= game.uniqueMisplaced,
+            uniques= game.uniqueAll)
+            
+            # log the submitted game
+            self.update_log(date, event_type, user=user, win=game.won, guesses=game.numGuesses, greens=game.uniqueCorrect, yellows=game.uniqueMisplaced, uniques=game.uniqueAll)
+
+            # return the baseStats for the submitted game
+            return baseStats
+
+        except DoubleSubmit:
+            # update the log with the double submission
+            self.update_log(date, 'DoubleSubmit', user=user)
+
+            # return None as there is no game submitted
+            return None
