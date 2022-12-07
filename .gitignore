@@ -10,3 +10,4 @@ lib/logs
 
 lib/credentials.py
 test.py
+.vscode

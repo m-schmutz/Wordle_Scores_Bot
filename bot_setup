@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# update and upgrade the system
+sudo apt-get update -y && sudo apt-get upgrade -y
+
+# install tesseract
+sudo apt install tesseract-ocr
+
+# create the virtual environment
+python3.10 -m venv ./311venv
+
+# activate virtual environment
+source ./venv/bin/activate
+
+# upgrade pip 
+pip3.10 install --upgrade pip > /dev/null
+
+# install pip packages
+pip3.10 install -r requirements.txt > /dev/null
