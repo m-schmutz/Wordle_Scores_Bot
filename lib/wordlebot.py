@@ -143,6 +143,8 @@ class WordleBot(commands.Bot):
         self.synced = False
         self.guild = Object(id=server_id)
         self.db = BotDatabase()
+
+        # log class, keeps track of all events that happen related to the bot
         self.log = BotLog()
 
 
@@ -339,11 +341,6 @@ class WordleBot(commands.Bot):
         self.update_log(datetime.now(), 'Startup')
 
         print(f'{self.user} ready!')
-
-
-    # def update_db(self):
-    #     # update the database
-    #     self.db.submit_data()
 
     def update_log(self, dtime:datetime, event:str, exc_name:str='', server:str='', user:str='', win:str='', guesses:str='', greens:str='', yellows:str='', uniques:str='', traceback:TracebackType=None):
         # update the log with passed data
