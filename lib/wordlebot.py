@@ -246,7 +246,7 @@ class WordleBot(commands.Bot):
 
         return choice(self._responses[numGuesses])
 
-    def scoreGame(self, image: bytes, submissionDate: datetime) -> GameStats:
+    def scoreGame(self, image: bytes, submissionDate: datetime) -> GameStats|None:
         """Parse a screenshot of a Wordle game and return a GameStats object containing
         information about the results.
         
