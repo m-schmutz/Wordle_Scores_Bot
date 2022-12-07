@@ -13,10 +13,7 @@ match basename(__file__):
         from discord import Interaction, Attachment, app_commands
         from wordlebot import *
         from credentials import bot_token, server_id
-        from logdatabase import LogUpdate
 
     case 'setup.py':
         from env_setup import *
 
-    case 'read_logs.py':
-        from logdatabase import LogReader
