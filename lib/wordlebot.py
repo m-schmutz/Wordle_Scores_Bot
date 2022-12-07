@@ -265,8 +265,14 @@ class WordleBot(commands.Bot):
         object : `GameStats`
         """
 
-        # Read user guesses
-        guesses = self._guessesFromImage(image)
+        # try to get guesses from the submitted image
+        try:
+            guesses = self._guessesFromImage(image)
+
+        # except for InvalidGame
+        # return None
+        except InvalidGame:
+            return None
 
         # get word of the day as well as the wordle number
         wotd, wrdl_num = get_wotd(submissionDate, wrdl_num=True)
@@ -375,6 +381,7 @@ class WordleBot(commands.Bot):
             # return the baseStats for the submitted game
             return baseStats
 
+        # except in the case of a double submission
         except DoubleSubmit:
             # update the log with the double submission
             self.update_log(date, 'DoubleSubmit', user=user)
