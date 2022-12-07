@@ -26,13 +26,13 @@ class BotLog():
     # adds shutdown entry to the log file
     def _log_shutdown(self) -> None:
         # update log on bot shutdown
-        self.update(datetime.now(), '', '', 'Shutdown')
+        self.update(datetime.now(), 'Shutdown')
 
 
     # adds start up entry to the log file
     def log_startup(self) -> None:
         # update log on bot startup
-        self.update(datetime.now(), '', '', 'Start up')
+        self.update(datetime.now(), 'Startup')
 
 
     # format the exception to be readable in log
@@ -46,7 +46,7 @@ class BotLog():
 
 
     # append entry to file
-    def update(self, dtime:datetime, server:str, user:str, event:str, traceback:TracebackType=None, exc_name:str='', guesses:str='') -> None:
+    def update(self, dtime:datetime, event:str, exc_name:str='', server:str='', user:str='', win:str='', guesses:str='', greens:str='', yellows:str='', uniques:str='', traceback:TracebackType=None) -> None:
         # check if there is a traceback
         if traceback:
             # create traceback log entry if it exists
@@ -57,7 +57,7 @@ class BotLog():
                 log.write(tb_entry)
 
         # generate the log entry
-        entry = f'{dtime.strftime("%m-%d-%Y %H:%M:%S")},{server},{user},{event},{exc_name}\n'
+        entry = f'{dtime.strftime("%m-%d-%Y %H:%M:%S")},{event},{exc_name},{server},{user},{win},{guesses},{greens},{yellows},{uniques}\n'
 
         # write the log entry to the log file
         with open(BOT_LOG, 'a') as log:
