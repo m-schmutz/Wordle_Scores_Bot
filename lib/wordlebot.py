@@ -4,6 +4,7 @@ from enum import Enum, auto
 from collections import Counter
 from dataclasses import dataclass
 from random import choice
+from types import TracebackType
 
 # pip modules
 from discord import Intents, Object, ButtonStyle, Embed, File, User, Color
@@ -340,10 +341,10 @@ class WordleBot(commands.Bot):
         print(f'{self.user} ready!')
 
 
-    def update_db(self):
-        # update the database
-        self.db.submit_data()
+    # def update_db(self):
+    #     # update the database
+    #     self.db.submit_data()
 
-    def update_log(self):
-        # update the log with action
-        self.log.update()
+    def update_log(self, dtime:datetime, event:str, exc_name:str='', server:str='', user:str='', win:str='', guesses:str='', greens:str='', yellows:str='', uniques:str='', traceback:TracebackType=None):
+        # update the log with passed data
+        self.log.update(dtime=dtime, event=event, exc_name=exc_name, server=server, user=user, win=win, guesses=guesses, greens=greens, yellows=yellows, uniques=uniques, traceback=traceback)
