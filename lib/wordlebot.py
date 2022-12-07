@@ -338,3 +338,12 @@ class WordleBot(commands.Bot):
         self.log.log_startup()
 
         print(f'{self.user} ready!')
+
+
+    def update_db(self):
+        # update the database
+        self.db.submit_data()
+
+    def update_log(self):
+        # update the log with action
+        self.log.update()
