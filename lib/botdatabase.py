@@ -6,21 +6,13 @@ from atexit import register
 from typing import Tuple
 
 # objects needed by wordle bot
-__all__ = ['DoubleSubmit', 'BaseStats', 'FullStats', 'BotDatabase']
+__all__ = ['BaseStats', 'FullStats', 'BotDatabase']
 
 # set DBLSUB_DISABLED to True if you want to ignore double submits
 DBLSUB_DISABLED = False
 
 # path to the database
 DB_PATH = './lib/bot_database/stats.db'
-
-class DoubleSubmit(Exception):
-    '''Exception raised if user attempts to submit twice on the same day'''
-    
-    # takes in username to print out whihc user is attempting to submit twice 
-    def __init__(self, username) -> None:
-        self.username = username    
-        self.message = 'You already submit today\'s game :)'
 
 
 ################################################################################################################################################
@@ -220,7 +212,7 @@ class BotDatabase:
         A user is added to the database if they are a new user. 
         Method will raise DoubleSubmit exception if method is called on the same user twice or more on one day'''
 
-        return None, 'FailedConnection'
+        return None, 'DoubleSubmit'
 
     
         

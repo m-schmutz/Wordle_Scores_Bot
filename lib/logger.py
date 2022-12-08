@@ -31,6 +31,13 @@ class BotLog():
 
     # adds start up entry to the log file
     def log_startup(self) -> None:
+        # check that the log has proper header
+        with open(BOT_LOG, 'r+') as log:
+            # check if the log is empty
+            if not len(log.readline()):
+                # write header if no logs are present
+                log.write('datetime,event,exc_name,server,user,win,guesses,greens,yellows,uniques\n')
+        
         # update log on bot startup
         self.update(datetime.now(), 'Startup')
 

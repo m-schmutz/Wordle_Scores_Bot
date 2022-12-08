@@ -346,7 +346,7 @@ class WordleBot(commands.Bot):
             self.synced = True
 
         # update log with startup time
-        self.update_log(datetime.now(), 'Startup')
+        self.log.log_startup()
         print('bot running')
 
 
