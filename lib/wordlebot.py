@@ -246,7 +246,7 @@ class WordleBot(commands.Bot):
 
         return choice(self._responses[numGuesses])
 
-    def scoreGame(self, image: bytes, submissionDate: datetime) -> GameStats|None:
+    def scoreGame(self, image: bytes, submissionDate: datetime, user: str) -> GameStats|None:
         """Parse a screenshot of a Wordle game and return a GameStats object containing
         information about the results.
         
@@ -270,8 +270,10 @@ class WordleBot(commands.Bot):
             guesses = self._guessesFromImage(image)
 
         # except for InvalidGame
+        # log the invalid game and
         # return None
         except InvalidGame:
+            self.update_log(submissionDate, 'InvalidGame', user=user)
             return None
 
         # get word of the day as well as the wordle number
@@ -345,8 +347,8 @@ class WordleBot(commands.Bot):
 
         # update log with startup time
         self.update_log(datetime.now(), 'Startup')
+        print('bot running')
 
-        print(f'{self.user} ready!')
 
     # updates the log with the provided information
     def update_log(self, dtime:datetime, event:str, exc_name:str='', server:str='', user:str='', win:str='', guesses:str='', greens:str='', yellows:str='', uniques:str='', traceback:TracebackType=None) -> None:
@@ -363,28 +365,30 @@ class WordleBot(commands.Bot):
         ---
         Function handles DoubleSubmit exception and stores all submission events in log
         '''
-        # try to add game to the database
-        try:
-            # submit game to the database
-            baseStats, event_type = self.db.submit_data(
-            username= user,
-            dtime= date,
-            win= game.won,
-            guesses= game.numGuesses,
-            greens= game.uniqueCorrect,
-            yellows= game.uniqueMisplaced,
-            uniques= game.uniqueAll)
-            
+        
+        # submit game to the database
+        baseStats, event_type = self.db.submit_data(
+        username= user,
+        dtime= date,
+        win= game.won,
+        guesses= game.numGuesses,
+        greens= game.uniqueCorrect,
+        yellows= game.uniqueMisplaced,
+        uniques= game.uniqueAll)
+
+        # check that the event_type is not None
+        # otherwise user attempted DoubleSubmit
+
+        if baseStats:
             # log the submitted game
             self.update_log(date, event_type, user=user, win=game.won, guesses=game.numGuesses, greens=game.uniqueCorrect, yellows=game.uniqueMisplaced, uniques=game.uniqueAll)
+        
+        else:
+            # else log the error
+            self.update_log(date, event_type, user=user)
 
-            # return the baseStats for the submitted game
-            return baseStats
 
-        # except in the case of a double submission
-        except DoubleSubmit:
-            # update the log with the double submission
-            self.update_log(date, 'DoubleSubmit', user=user)
+        # return the baseStats for the submitted game
+        return baseStats, event_type
 
-            # return None as there is no game submitted
-            return None
+        

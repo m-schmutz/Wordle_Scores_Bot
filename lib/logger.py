@@ -20,7 +20,7 @@ class BotLog():
     def __init__(self) -> None:
         # register when bot terminates so that log is updated
         # (This makes sure that the log will be updated on an unexpected shutdown)
-        register(self._log_shutdown())
+        register(self._log_shutdown)
 
 
     # adds shutdown entry to the log file

@@ -1,65 +1,58 @@
 #!./venv/bin/python3.10
 from lib import *
 
-async def _submit(bot:WordleBot, image:Attachment, interaction: Interaction) -> None:
-    
-    # Grab date of submission and try to score the game. If the game
-    # cannot be processed, reply with an error message and return.
-    date = interaction.created_at.astimezone().date()
-    game = bot.scoreGame(await image.read(), date)
-    
-
-    # Submit scores to database. If the user has already submit
-    # today, then reply with an error message and return.
-    baseStats = bot.submit_game(date, str(interaction.user), game) 
-        
-        
-    # Reply to user's submission with stats.
-    await interaction.response.send_message(
-        file= await image.to_file(),
-        embed= SubmissionEmbed(
-            date= date,
-            user= interaction.user,
-            attachment_filename= image.filename,
-            stats= baseStats))
-
-    await interaction.followup.send(
-        content= bot.getResponse(
-            solved= game.won,
-            numGuesses= game.numGuesses),
-        ephemeral= True)
-
-
 def main() -> None:
-
     # initialize WordleBot
     bot = WordleBot(server_id)
     slash_cmd = bot.tree.command
 
-    # command to submit a game
+    # slash command for submitting games
     @slash_cmd(description='Submit a screenshot of your Wordle game!', guild=bot.guild)
     async def submit(interaction: Interaction, image: Attachment) -> None:
-
-        # get exact time of command and the user 
-        user = str(interaction.user)
-        dtime = datetime.now()
-
+        
+        # try block is used to catch any unexpected exceptions that occur and log them
         try:
-            # try to submit game
-            # update the database and return the event type
-            await _submit(bot, image, interaction)
+            # Grab date of submission and try to score the game. If the game
+            # cannot be processed, reply with an error message and return.
+            date = interaction.created_at.astimezone()
+            game = bot.scoreGame(await image.read(), date, str(interaction.user))
 
-        # otherwise invalid game, update user
-        except InvalidGame as e:
-            return await interaction.response.send_message(content=e.message, ephemeral=True)
+            # if invalid game is given, game will be None
+            # update log and send error message
+            if not game:
+                return await interaction.response.send_message(content='Image not recognized as valid Wordle game', ephemeral=True)
 
 
-        # log DoubleSubmit
-        except DoubleSubmit as e:
-            return await interaction.response.send_message(content=e.message, ephemeral=True)
+            # Submit scores to database. If the user has already submitted
+            # today, then reply with an error message and return.
+            baseStats, event_type = bot.submit_game(date, str(interaction.user), game) 
+
+            # if the game submission failed
+            # notify user
+            if not baseStats:
+                return await interaction.response.send_message(content=f'error occurred: {event_type}', ephemeral=True)
+
+                
+            # Reply to user's submission with stats.
+            await interaction.response.send_message(
+                file= await image.to_file(),
+                embed= SubmissionEmbed(
+                    date= date,
+                    user= interaction.user,
+                    attachment_filename= image.filename,
+                    stats= baseStats))
+
+            # send insult
+            await interaction.followup.send(
+                content= bot.getResponse(
+                    solved= game.won,
+                    numGuesses= game.numGuesses),
+                ephemeral= True)
+
 
         # log un-handled exception
         except:
+            print(f'caught it in run_bot line:52')
             exc_type, _, exc_traceback = exc_info()
     
     # command to get wordle link
@@ -92,6 +85,13 @@ def main() -> None:
 
         except:
             exc_type, _, exc_traceback = exc_info()
+
+
+    @bot.event
+    async def on_command_error(ctx, error):
+        print(f'{ctx = }')
+        print(f'{error = }')
+
 
     bot.run(bot_token)
 
