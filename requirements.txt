@@ -2,4 +2,3 @@ opencv-python
 psutil
 pytesseract
 requests
---upgrade git+https://github.com/Rapptz/discord.py

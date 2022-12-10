@@ -2,7 +2,7 @@
 *.vscode
 venv/
 lib/bot_database/
-lib/wordle_pickles/
+lib/pickles/
 lib/logs
 *__pycache__
 

@@ -3,17 +3,35 @@
 # update and upgrade the system
 sudo apt-get update -y && sudo apt-get upgrade -y
 
+
 # install tesseract
-sudo apt install tesseract-ocr
+sudo apt install tesseract-ocr -y
+
+
+# install python3.10 virtual environment
+sudo apt install python3.10-venv -y
+
 
 # create the virtual environment
-python3.10 -m venv ./311venv
+python3.10 -m venv ./venv
+
 
 # activate virtual environment
 source ./venv/bin/activate
 
+
 # upgrade pip 
-pip3.10 install --upgrade pip > /dev/null
+pip3.10 install --upgrade pip
+
+
+# install discord api
+pip3.10 install --upgrade git+https://github.com/Rapptz/discord.py
+
 
 # install pip packages
-pip3.10 install -r requirements.txt > /dev/null
+pip3.10 install -r requirements.txt
+
+
+# create the directories for logs and pickle files
+mkdir ./lib/logs
+mkdir ./lib/pickles
