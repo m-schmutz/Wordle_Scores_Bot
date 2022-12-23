@@ -10,7 +10,7 @@ TB_LOG = './lib/logs/traceback.log'
 
 class BotLog():
     '''
-    This is a logger for the WordleBot
+    This is the logger for the WordleBot
     
     ---
     All logs for the bot are stored in the lib/logs directory
